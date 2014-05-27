@@ -8,6 +8,7 @@ module SmtLib.Logic.Core
   , (.&&), (.||)
   , bigAnd
   , bigOr
+  , (.==>)
   , (.==),(./=)
   )
 where
@@ -24,6 +25,7 @@ import Control.Monad.State.Lazy (lift)
 
 infixr 3 .&&
 infixr 2 .||
+infixr 1 .==>
 infix 4 .==,./=
 
 bvar :: Monad m => SMT m Literal
@@ -48,6 +50,8 @@ a .|| b
   | b == bot =a
   | otherwise = shallow "or" a b
 
+(.==>) :: S.Expr -> S.Expr -> S.Expr
+p .==> q = S.app "implies" [p,q]
 
 top :: S.Expr
 top = B.true

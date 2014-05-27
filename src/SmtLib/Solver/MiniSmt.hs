@@ -10,24 +10,33 @@ import Debug.Trace
 
 type Var = String
 
-minismt :: String -> IO (Maybe (M.Map Var Constant))
+minismt :: Solver
 minismt input = do
   {-( code , stdout, stderr ) <- readProcessWithExitCode "minismt" ["-m","-v1"] input-}
   {-( code , stdout, stderr ) <- readProcessWithExitCode "minismt" ["-m","-v2","-comp", "-simp", "2", "-t", "10"] input-}
-  ( code , stdout, stderr ) <- readProcessWithExitCode "minismt" ["-m","-v2"] input
-  putStrLn input
-  print code
-  putStrLn stderr
-  putStrLn stdout
-  case lines stdout of
-    "sat" : xs -> return . Just . M.fromList $ map parse xs
-    _          -> return Nothing
+  (code , stdout, stderr) <- readProcessWithExitCode "minismt" ["-m","-v2"] input
+  --putStrLn input
+  --print code
+  --writeFile "/tmp/fm.smt2" input
+  --putStrLn stderr
+  --putStrLn stdout
+  return $ case lines stdout of
+    "sat"   : xs -> Sat . M.fromList $ map parse xs
+    "unsat" : xs -> Unsat
+    _            -> Unknown
   where 
     parse line = (var, read (tail val)::Constant)
       where (var,val) = break (== '=') $ filter (/=' ') line
 
+z3 :: Solver
+z3 input = do
+  (code , stdout, stderr) <- readProcessWithExitCode "z3" ["-in","-smt2"] input
+  --putStrLn input
+  --print code
+  --putStrLn stderr
+  --putStrLn stdout
+  return $ case lines stdout of
+    "sat"   : xs -> Sat $ M.empty
+    "unsat" : xs -> Unsat
+    _            -> Unknown
 
-{-instance Decode (Maybe (M.Map Var Constant)) Literal Constant where-}
-  {-decode (LBool b) = return CBool-}
-  {-decode (LInt i) = return CInt i-}
-  {-decode (LVar i) = \m -> M.lookup (show i) m-}

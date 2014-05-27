@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module SmtLib.Logic.Int 
   ( module SMTLib2.Int
-  , nvar, ivar, svar
-  , nvarm, ivarm, svarm
+  , nvar, ivar, sivar,snvar
+  , nvarm, ivarm, sivarm, snvarm
   , (.*), (.+), (.-)
   , (.=<),(.<),(.>),(.>=)
   , bigPlus
@@ -10,7 +10,7 @@ module SmtLib.Logic.Int
   )
 where
 
-import SmtLib.Logic.Core ((.==), (./=), (.||))
+import SmtLib.Logic.Core ((.==), (./=), (.||), (.&&))
 import SmtLib.SMT
 import SmtLib.Logic.Data
 
@@ -33,7 +33,6 @@ nvar :: Monad m => SMT m Literal
 nvar = do
   l <- fresh
   declare l TNat 
-  {-assert $ (fm l .> num 0)-}
   return $ l
 
 zero :: S.Expr
@@ -42,22 +41,27 @@ zero = num 0
 one :: S.Expr
 one = num 1
 
-svar :: Monad m => SMT m Literal
-svar = do
+sivar :: Monad m => SMT m Literal
+sivar = do
+  l <- fresh
+  declare l TInt
+  let e = fm l
+  assert $ (e .>= nNeg one) .&& (e .=< one)
+  return $ l
+
+snvar :: Monad m => SMT m Literal
+snvar = do
   l <- fresh
   declare l TNat
   let e = fm l
-  assert $ (e .== zero) .|| (e .== one)
+  assert $ (e .=< one)
   return $ l
 
-ivarm :: (Monad m, Ord a) => a -> Memo a (SMT m) Literal
-ivarm = memoized $ \a -> lift ivar
-
-nvarm :: (Monad m, Ord a) => a -> Memo a (SMT m) Literal
-nvarm = memoized $ \a -> lift nvar
-
-svarm :: (Monad m, Ord a) => a -> Memo a (SMT m) Literal
-svarm = memoized $ \a -> lift svar
+ivarm,nvarm,sivarm,snvarm :: (Monad m, Ord a) => a -> Memo a (SMT m) Literal
+ivarm  = memoized $ \a -> lift ivar
+nvarm  = memoized $ \a -> lift nvar
+sivarm = memoized $ \a -> lift sivar
+snvarm = memoized $ \a -> lift snvar
 
 
 (.*),(.+),(.-) :: S.Expr -> S.Expr -> S.Expr
@@ -72,12 +76,11 @@ a .+ b
   | otherwise = shallow "+" a b
 a .- b = nSub a b
 
-(.<),(.=<),(.>=),(.>) :: S.Expr -> S.Expr -> S.Expr
+(.<),(.>=),(.>) :: S.Expr -> S.Expr -> S.Expr
 (.<)  = nLt
 (.=<) = nLeq
 (.>=) = nGeq
 (.>)  = nGt
-
 
 bigPlus :: [S.Expr] -> S.Expr
 bigPlus = foldr (.+) zero

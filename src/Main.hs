@@ -85,36 +85,31 @@ dom ax = do
 en :: Monad m => SMT m (M.Map A Literal)
 en = snd `liftM`  (memo $ mapM nvarm [A,B])
 
-main :: IO ()
 main = do
-  res :: Maybe (M.Map A Constant) <- solve minismt $ do
+  {-res :: Sat (M.Map A Constant) <- solve minismt $ do-}
+    {-setLogic "QF_NIA"-}
+    {-(a,m) <- memo $ do-}
+      {-liftM2 (.==) (fm `liftM` nvarm A) (fm `liftM` nvarm B)-}
+    {-assert a-}
+    {-return $ decode m-}
+  {-print res-}
+  res :: Sat [Constant] <- solve minismt $ do
     setLogic "QF_NIA"
     (a,m) <- memo $ do
       nvarm A
       nvarm A
       nvarm B
-      svarm (C 1)
-      svarm (C 2)
-    let 
+      sivarm (C 1)
+      sivarm (C 2)
+      nvarm A
+      nvarm A
+    let
       a = m M.! A
       b = m M.! B
-      c = m M.! (C 1) 
-      d = m M.! (C 2) 
+      c = m M.! (C 1)
+      d = m M.! (C 2)
     {-assert $ toExpr a .== toExpr b-}
     assert $ fm c .== fm d
-    return $ decode m
+    return $ decode [a,b]
   print res
-
-  {-res :: Maybe (M.Map A Constant) <- solve minismt $ do-}
-    {-setLogic "QF_NIA"-}
-    {-a <- nvar' A-}
-    {-b <- nvar' B-}
-    {-c1 <- nvar' (C 1)-}
-    {-c2 <- nvar' (C 1)-}
-     
-    {-let (b,en) = runm bigAnd [ a .== b ]-}
-    {-assert b-}
-    {-return $ decode en-}
-  {-print res-}
-
 
