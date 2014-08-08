@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import SmtLib.Solver.MiniSmt
+import SmtLib.Solver
 
 import SmtLib.Logic.Core
 import SmtLib.Logic.Int

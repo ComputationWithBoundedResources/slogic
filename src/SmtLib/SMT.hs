@@ -1,19 +1,20 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# language FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module SmtLib.SMT where
 
-import qualified SMTLib2 as SL
-import SmtLib.PP
 
+import Control.Applicative (Applicative)
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
 
-import System.IO
+import qualified SMTLib2 as SL
+import SmtLib.PP
+
 {-import Control.Monad (liftM,liftM2,foldM,mapM,sequence)-}
 {-import Control.Monad.Identity-}
 
@@ -72,7 +73,7 @@ class Monad m => Decode m c a where
   decode :: c -> m a
 
 newtype SMT m a = SMT { runSMT :: (StateT SMTState m) a }
-  deriving (Functor, Monad, MonadIO, MonadState SMTState)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadState SMTState)
 
 data SMTState = SMTState {
     logic    :: String
@@ -136,15 +137,9 @@ solve solver build = do
   (problem, decoder) <- smt build
   result <- solver problem
   case result of
-    Sat valuation -> do
-      --hPutStrLn stderr "SMT.solve: satisfiable"
-      return . Sat $ runReader decoder valuation
-    Unsat -> do
-      --hPutStrLn stderr "SMT.solve: unsatisfiable"
-      return Unsat
-    Unknown -> do
-      --hPutStrLn stderr "SMT.solve: unknown"
-      return Unknown
+    Sat valuation -> return . Sat $ runReader decoder valuation
+    Unsat         -> return Unsat
+    Unknown       -> return Unknown
 
 smt :: Monad m => SMT m a -> m (String, a)
 smt m = do
@@ -190,7 +185,7 @@ instance (Ord i, Decode m c a) => Decode m (M.Map i c) (M.Map i a) where
 -- memoization
 
 newtype Memo a m r =  Memo { runMemo :: StateT (M.Map a Literal) m r}
-  deriving (Functor, Monad, MonadTrans, MonadIO, MonadState (M.Map a Literal))
+  deriving (Functor, Applicative, Monad, MonadTrans, MonadIO, MonadState (M.Map a Literal))
 
 type MemoSMT a m r = Memo a (SMT m) r
 

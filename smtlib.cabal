@@ -13,45 +13,45 @@ cabal-version:       >=1.8
 build-type:          Simple
 
 executable smt
-  main-is:             
+  main-is:
     Main.hs
 
   hs-source-dirs:
     src
 
   build-depends:       
-    base == 4.*,
-    smtLib >= 1.0.6,
+    base       == 4.*,
     containers >= 0.5,
-    mtl >= 2.1,
-    process >= 1.1,
-    pretty >= 1.1
+    mtl        >= 2.1,
+    pretty     >= 1.1,
+    process    >= 1.1,
+    smtLib     >= 1.0.6
 
   ghc-options:
-    -O2 -funbox-strict-fields -threaded
+    -O -funbox-strict-fields -threaded
     
 library
   exposed-modules:
-    SmtLib.SMT
-    SmtLib.PP
-    SmtLib.Solver.MiniSmt 
     SmtLib.Logic.Core 
-    SmtLib.Logic.Int 
     SmtLib.Logic.Data
+    SmtLib.Logic.Int 
     SmtLib.Logic.QF_NIA
+    SmtLib.PP
+    SmtLib.SMT
+    SmtLib.Solver
 
   hs-source-dirs:
     src
 
   build-depends:       
-    base == 4.*,
-    smtLib >= 1.0.6,
+    base       == 4.*,
     containers >= 0.5,
-    mtl >= 2.1,
-    process >= 1.1,
-    pretty >= 1.1
+    mtl        >= 2.1,
+    pretty     >= 1.1,
+    process    >= 1.1,
+    smtLib     >= 1.0.6
 
   ghc-options:
-    -O2 -funbox-strict-fields -threaded
+    -O -funbox-strict-fields -threaded
 
 
