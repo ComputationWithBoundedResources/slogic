@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module SmtLib.Logic.Int 
   ( module SMTLib2.Int
+  , zero, one
   , nvar, ivar, sivar,snvar
   , nvarm, ivarm, sivarm, snvarm
   , (.*), (.+), (.-)

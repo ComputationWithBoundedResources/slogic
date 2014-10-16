@@ -127,6 +127,11 @@ fresh = do
 
 data Sat a = Sat a | Unsat | Unknown deriving (Eq,Show)
 
+instance Functor Sat where
+  f `fmap` (Sat a) = Sat (f a)
+  _ `fmap` Unsat   = Unsat
+  _ `fmap` Unknown = Unknown
+
 type Solver = String -> IO (Sat (M.Map String Constant))
 
 solve :: 
@@ -159,14 +164,25 @@ instance Decode (Reader (M.Map String Constant)) Literal Constant where
     (LVar i)  -> asks $ \m -> err `fromMaybe` M.lookup (funSymb ++ show i) m
     where err = error "SmtLib.SMT.decode.asks: not found"
 
+instance Decode (Reader (M.Map String Constant)) Literal Int where
+  decode c = case c of
+    (LInt i) -> return i
+    (LVar i)  -> asks $ \m -> err1 `fromMaybe` (fromConstant `liftM` M.lookup (funSymb ++ show i) m)
+    _        -> err2
+    where  
+      err1 = error "SmtLib.SMT.decode.asks: not found"
+      err2 = error "SmtLib.SMT.decode: type mismatch"
+      fromConstant (CInt i) = i
+      fromConstant _        = err2
+
 instance Monad m => Decode m () () where
-    decode () = return ()
+  decode () = return ()
     
 instance (Decode m c a, Decode m d b) => Decode m (c,d) (a,b) where
-    decode (c,d) = do a <- decode c; b <- decode d; return (a,b)
+  decode (c,d) = do a <- decode c; b <- decode d; return (a,b)
 
 instance (Decode m c a) => Decode m [c] [a] where
-    decode = mapM decode
+  decode = mapM decode
 
 instance Decode m a b => Decode m (Maybe a) (Maybe b) where
   decode (Just b) = liftM Just (decode b)
@@ -201,3 +217,4 @@ memoized f a = do
       modify (M.insert a b)
       return b
     Just b -> return b
+

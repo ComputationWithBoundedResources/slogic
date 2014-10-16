@@ -10,11 +10,14 @@ module SmtLib.Logic.Core
   , bigOr
   , (.==>)
   , (.==),(./=)
+
+  , prettyExpr
   )
 where
 
 import SmtLib.SMT
 import SmtLib.Logic.Data
+import SmtLib.PP
 
 import SMTLib2.Core hiding (and,or,true,false)
 import qualified SMTLib2.Core as B (and,or,true,false)
@@ -69,4 +72,5 @@ bigOr = foldr (.||) bot
 (.==) = (===)
 (./=) = (=/=)
 
-
+prettyExpr :: S.Expr -> String
+prettyExpr = render . S.pp
