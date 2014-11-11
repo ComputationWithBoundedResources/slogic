@@ -20,7 +20,7 @@ import SmtLib.Logic.Data
 import SmtLib.PP
 
 import SMTLib2.Core hiding (and,or,true,false)
-import qualified SMTLib2.Core as B (and,or,true,false)
+import qualified SMTLib2.Core as B (true,false)
 import qualified SMTLib2 as S
 import SMTLib2 (Expr)
 
@@ -35,10 +35,10 @@ bvar :: Monad m => SMT m Literal
 bvar = do
   l <- fresh
   declare l TBool
-  return $ l
+  return l
 
 bvarm :: (Monad m, Ord a) => a -> Memo a (SMT m) Literal
-bvarm = memoized $ \a -> lift bvar
+bvarm = memoized $ \_ -> lift bvar
 
 
 (.&&), (.||) :: S.Expr -> S.Expr -> S.Expr
@@ -74,3 +74,4 @@ bigOr = foldr (.||) bot
 
 prettyExpr :: S.Expr -> String
 prettyExpr = render . S.pp
+

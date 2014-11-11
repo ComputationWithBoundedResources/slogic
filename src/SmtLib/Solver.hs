@@ -1,6 +1,7 @@
 module SmtLib.Solver where
 
 import System.Process
+import System.Exit
 import qualified Data.Map as M
 
 import SmtLib.SMT
@@ -12,10 +13,14 @@ minismt :: Solver
 minismt input = do
   (code , stdout, stderr) <- readProcessWithExitCode "minismt" ["-m","-v2"] input
   writeFile "/tmp/fm.smt2" input
-  return $ case lines stdout of
-    "sat"   : xs -> Sat . M.fromList $ map parse xs
-    "unsat" : xs -> Unsat
-    _            -> Unknown
+  return $ case code of
+    ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
+    ExitSuccess   -> case lines stdout of
+      "sat"   : xs      -> Sat . M.fromList $ map parse xs
+      "unsat" : _       -> Unsat
+      "unknown" : _     -> Unknown
+      "parse error" : _ -> Error "minismt: parse error"
+      _                 -> Error "some error"
   where 
     parse line = (var, read (tail val)::Constant)
       where (var,val) = break (== '=') $ filter (/=' ') line

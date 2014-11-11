@@ -125,12 +125,18 @@ fresh = do
 
 -- inspired by satchmo library 
 
-data Sat a = Sat a | Unsat | Unknown deriving (Eq,Show)
+data Sat a 
+  = Sat a 
+  | Unsat 
+  | Unknown 
+  | Error String
+  deriving (Eq,Show)
 
 instance Functor Sat where
-  f `fmap` (Sat a) = Sat (f a)
-  _ `fmap` Unsat   = Unsat
-  _ `fmap` Unknown = Unknown
+  f `fmap` (Sat a)   = Sat (f a)
+  _ `fmap` Unsat     = Unsat
+  _ `fmap` Unknown   = Unknown
+  _ `fmap` (Error s) = Error s
 
 type Solver = String -> IO (Sat (M.Map String Constant))
 
@@ -145,6 +151,7 @@ solve solver build = do
     Sat valuation -> return . Sat $ runReader decoder valuation
     Unsat         -> return Unsat
     Unknown       -> return Unknown
+    (Error s)     -> return (Error s)
 
 smt :: Monad m => SMT m a -> m (String, a)
 smt m = do

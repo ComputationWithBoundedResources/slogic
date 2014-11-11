@@ -11,7 +11,7 @@ module SmtLib.Logic.Int
   )
 where
 
-import SmtLib.Logic.Core ((.==), (./=), (.||), (.&&))
+import SmtLib.Logic.Core ((.&&))
 import SmtLib.SMT
 import SmtLib.Logic.Data
 
@@ -19,6 +19,8 @@ import SMTLib2.Int
 import qualified SMTLib2 as S 
 
 import Control.Monad.State.Lazy (lift)
+
+default (Int)
 
 infixl 7  .*
 infixl 6  .+, .-
@@ -77,7 +79,7 @@ a .+ b
   | otherwise = shallow "+" a b
 a .- b = nSub a b
 
-(.<),(.>=),(.>) :: S.Expr -> S.Expr -> S.Expr
+(.<),(.=<),(.>=),(.>) :: S.Expr -> S.Expr -> S.Expr
 (.<)  = nLt
 (.=<) = nLeq
 (.>=) = nGeq
@@ -88,3 +90,4 @@ bigPlus = foldr (.+) zero
 
 bigProd :: [S.Expr] -> S.Expr
 bigProd = foldr (.*) one
+
