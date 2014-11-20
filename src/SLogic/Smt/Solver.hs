@@ -1,63 +1,37 @@
-module SLogic.Smt.Solver where
+{-# LANGUAGE ScopedTypeVariables #-}
+-- | This module provides 'Solver' implementations for SMT.
+module SLogic.Smt.Solver
+  (minismt)
+  where
 
-import qualified Data.Set as S
-import System.Process
-import System.Exit
-import qualified Data.Map.Strict as M
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import           Data.Generics.Uniplate.Operations
+import qualified Data.Map.Strict                   as M
+import qualified Data.Set                          as S
+import           System.Exit
+import           System.Process
+import qualified Text.PrettyPrint.ANSI.Leijen      as PP
 
-import SLogic.Solver
-import SLogic.Smt.SmtM
-import SLogic.Logic.Core
-import SLogic.Logic.Int
+import           SLogic.Logic.Core
+import           SLogic.Logic.Int
+import           SLogic.Result
+import           SLogic.Solver
+import           SLogic.SolverState
 
-type Var = String
 
-class Universe a where
-  unia :: a -> [a]
+class Vars e where
+  vars :: e -> S.Set (String, String)
 
-class BiUniverse a b where
-  unib :: a -> [b]
+instance Vars TInt where
+  vars e = S.fromList [ (v, ty) | IVar v ty <- universeBi e]
 
-instance Universe IExpr where
-  unia (Neg e)  = [e]
-  unia (Add es) = es
-  unia (Mul es) = es
-  unia _        = []
+instance Vars e => Vars (Formula e) where
+  vars e = bvs `S.union` evs
+   where
+     evs = S.unions   [ vars a      | Atom a <- es ]
+     bvs = S.fromList [ (v,"Bool")  | BVar v <- es ]
+     es = universe e
 
-instance BiUniverse IAtom IExpr where
-  unib (Lt e1 e2)  = [e1,e2]
-  unib (Lte e1 e2) = [e1,e2]
-  unib (Gte e1 e2) = [e1,e2]
-  unib (Gt e1 e2)  = [e1,e2]
-  unib (IExpr e1)  = [e1]
-
-instance Universe (Expr e) where
-  unia (Not e)         = [e]
-  unia (And es)        = es
-  unia (Or es)         = es
-  unia (Ite e1 e2 e3)  = [e1,e2,e3]
-  unia (Implies e1 e2) = [e1,e2]
-  unia (Eq e1 e2)      = [e1,e2]
-  unia _               = []
-
-class Vars a where
-  vars :: a -> S.Set (String, String)
-
-instance Vars IExpr where
-  vars (IVar v ty) = S.singleton (v,ty)
-  vars e = foldl S.union S.empty (map vars $ unia e)
-
-instance Vars IAtom where
-  vars e = foldl S.union S.empty (map vars (unib e :: [IExpr]))
-
-instance Vars e => Vars (Expr e) where
-  vars (Atom e) = vars e
-  vars e = foldl S.union S.empty (map vars $ unia e)
-
---ppSExpr :: PP.Doc -> [PP.Doc] -> PP.Doc
---ppSExpr op es = PP.parens (PP.hsep $ op :es)
-
+-- default pretty printing
 ppIExpr :: IExpr-> PP.Doc
 ppIExpr e = case e of
   IVar v _ -> PP.text v
@@ -67,16 +41,16 @@ ppIExpr e = case e of
   Mul es -> ppsexpr "*"  es
   where ppsexpr op es = PP.parens (PP.hsep $ PP.text op : map ppIExpr es)
 
-ppIAtom :: IAtom -> PP.Doc
-ppIAtom e = case e of
+ppTInt :: TInt -> PP.Doc
+ppTInt e = case e of
   IExpr e1  -> ppIExpr e1
   Lt e1 e2  -> ppbin "<" e1 e2
-  Lte e1 e2 -> ppbin "=<" e1 e2
+  Lte e1 e2 -> ppbin "<=" e1 e2
   Gte e1 e2 -> ppbin ">=" e1 e2
   Gt e1 e2  -> ppbin ">" e1 e2
   where ppbin op e1 e2 = PP.parens (PP.text op PP.<+> ppIExpr e1 PP.<+> ppIExpr e2)
 
-ppExpr :: (e -> PP.Doc) -> Expr e -> PP.Doc
+ppExpr :: (e -> PP.Doc) -> Formula e -> PP.Doc
 ppExpr ppAtom e = case e of
   Atom a        -> ppAtom a
   BVar v        -> PP.text v
@@ -89,11 +63,14 @@ ppExpr ppAtom e = case e of
   Eq e1 e2      -> ppsexpr "=" [e1, e2]
   where ppsexpr op es = PP.parens (PP.hsep $ PP.text op : map (ppExpr ppAtom)  es)
 
-instance PP.Pretty IAtom where
-  pretty = ppIAtom
+instance PP.Pretty TInt where
+  pretty = ppTInt
 
-instance PP.Pretty e => PP.Pretty (Expr e) where
+instance PP.Pretty e => PP.Pretty (Formula e) where
   pretty = ppExpr PP.pretty
+
+
+-- pretty printing of smt commands
 
 ppSetLogic :: String -> PP.Doc
 ppSetLogic s = PP.parens (PP.text "set-logic" PP.<+> PP.text s)
@@ -108,22 +85,25 @@ ppCheckSat :: PP.Doc
 ppCheckSat = PP.parens (PP.text "check-sat")
 
 
-newtype Minismt e = Minismt (SmtState e)
+newtype Minismt f = Minismt f
 
-instance (Vars e, PP.Pretty e) => PP.Pretty (Minismt e) where
-  pretty (Minismt st) = 
-    ppSetLogic (logic st)
+
+instance PP.Pretty (Minismt (SolverState ( Formula TInt))) where
+  pretty (Minismt st) =
+    ppSetLogic (format st)
     PP.<$> PP.vcat (map ppDeclareFun allvars)
-    PP.<$> PP.vcat (map (ppAssert . PP.pretty) (asserts st))
+    PP.<$> PP.vcat (map (ppAssert . PP.pretty) (reverse $ asserts st))
     PP.<$> ppCheckSat
+    PP.<$> PP.empty
     where allvars = S.toList $ foldl (\s -> S.union s . vars) S.empty (asserts st)
 
 
-minismt :: (Vars e, PP.Pretty e) => Solver (SmtState e)
+-- | Minismt solver. Constructs the problem from 'SolverState'.
+minismt :: Solver (SolverState (Formula TInt))
 minismt st = do
   let input = show $ PP.pretty (Minismt st)
-  (code , stdout, stderr) <- readProcessWithExitCode "minismt" ["-m","-v2"] input
   writeFile "/tmp/fm.smt2" input
+  (code , stdout, stderr) <- readProcessWithExitCode "minismt" ["-m","-v2"] input
   return $ case code of
     ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
     ExitSuccess   -> case lines stdout of
@@ -132,7 +112,7 @@ minismt st = do
       "unknown" : _     -> Unknown
       "parse error" : _ -> Error "minismt: parse error"
       _                 -> Error "some error"
-  where 
+  where
     parse line = (var, read (tail val)::Value)
       where (var,val) = break (== '=') $ filter (/=' ') line
 
@@ -145,7 +125,7 @@ minismt st = do
     --"sat"   : xs -> Sat $ M.empty
     --"unsat" : xs -> Unsat
     --_            -> Unknown
-  
+
 -- z3 does not know nat
 --z3 :: Solver
 --z3 input = do
@@ -154,5 +134,4 @@ minismt st = do
     --"sat"   : xs -> Sat $ M.empty
     --"unsat" : xs -> Unsat
     --_            -> Unknown
-
 
