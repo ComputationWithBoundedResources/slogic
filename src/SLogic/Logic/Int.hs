@@ -3,6 +3,7 @@ module SLogic.Logic.Int
   (
   IExpr (..)
   , TInt (..)
+  , simplify
 
   -- * standard interface
   , tInt, ivar, tNat, nvar
@@ -38,6 +39,7 @@ import           Control.Monad.Reader
 import           Data.Generics.Uniplate.Direct
 import qualified Data.Map.Strict               as M
 import           Data.Maybe                    (fromMaybe)
+import qualified Data.Set as S
 
 import           SLogic.Decode
 import           SLogic.Logic.Core
@@ -49,14 +51,14 @@ data IExpr
   = IVar Var String -- ^ IVar id type; Type can be chosen; usually "Int" or "Nat"
   | IVal Int
   | Neg IExpr
-  | Add [IExpr]
-  | Mul [IExpr]
+  | Add IExpr IExpr
+  | Mul IExpr IExpr
   deriving (Eq, Ord, Show)
 
 instance Uniplate IExpr where
   uniplate (Neg e) = plate Neg |* e
-  uniplate (Add es) = plate Add ||* es
-  uniplate (Mul es) = plate Add ||* es
+  uniplate (Add e1 e2) = plate Add |* e1 |* e2
+  uniplate (Mul e1 e2) = plate Add |* e1 |* e2
   uniplate x        = plate x
 
 instance Biplate IExpr IExpr where
@@ -81,14 +83,17 @@ instance Biplate TInt IExpr where
   biplate (Gte e1 e2) = plate Gte |* e1 |* e2
   biplate (Gt e1 e2)  = plate Gt |* e1 |* e2
 
+instance Vars TInt where
+  vars e = S.fromList [ (v, ty) | IVar v ty <- universeBi e]
+
 instance LEq IExpr TInt where
   e1 `leq` e2  = Atom (IExpr e1) `Eq` Atom (IExpr e2)
 
--- | Int type.
+-- | Integer type.
 tInt :: String
 tInt = "Int"
 
--- | Nat type.
+-- | Natural type. Nat is not part of the smtlib2-standard but handled internally.
 tNat :: String
 tNat = "Nat"
 
@@ -105,27 +110,36 @@ one  = int 1
 int :: Int -> IExpr
 int = IVal
 
+-- push negations down
 neg :: IExpr -> IExpr
 neg = Neg
 
 scale :: Int -> IExpr -> IExpr
-scale i e = int i .* e
+scale i e = int i `mul` e
+
 
 mul, add, sub :: IExpr -> IExpr -> IExpr
+IVal a `mul` IVal b = IVal (a * b)
 a `mul` b
   | a == zero || b == zero = zero
   | a == one = b
+  | a == none = neg b
   | b == one = a
-  | otherwise = bigMul [a,b]
+  | b == none = neg a
+  | otherwise = Mul a b
+  where none = neg one
+IVal a `add` IVal b = IVal (a + b)
 a `add` b
   | a == zero = b
   | b == zero = a
-  | otherwise = bigAdd [a,b]
+  | a == neg b = zero
+  | otherwise = Add a b
 a `sub` b = a `add` neg b
 
 bigMul, bigAdd :: [IExpr] -> IExpr
-bigMul = Mul
-bigAdd = Add
+bigMul = foldl mul one
+bigAdd = foldl add zero
+
 
 lt, lte, gte, gt :: IExpr -> IExpr -> Formula TInt
 a `lt`  b = Atom (a `Lt` b)
@@ -186,6 +200,32 @@ ltM  = liftM2 lte
 lteM = liftM2 lte
 gteM = liftM2 lte
 gtM  = liftM2 lte
+
+
+-- * simplification
+
+simplify :: IExpr -> IExpr
+simplify = rewrite k
+  where
+    k (Neg (Neg e)) = Just e
+    k (Neg (Add e1 e2))  = Just $ Add (neg e1) (neg e2)
+    k (Neg (Mul e1 e2))  = Just $ Mul (neg e1) e2
+
+    k (Mul (IVal i1) (IVal i2)) = Just $ IVal (i1 * i2)
+    k (Mul e1 e2)
+      | e1 == zero || e2 == zero = Just zero
+      | e1 == one = Just e2
+      | e1 == none = Just (neg e2)
+      | e2 == one = Just e1
+      | e2 == none = Just (neg e1)
+      where none = neg one
+    k (Add (IVal i1) (IVal i2)) = Just $ IVal (i1 + i2)
+    k (Add e1 e2)
+      | e1 == zero = Just e2
+      | e2 == zero = Just e1
+      | e1 == neg e2 = Just zero
+    k _ = Nothing
+
 
 
 -- * decoding

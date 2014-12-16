@@ -87,7 +87,7 @@ bvarM' = bvar `liftM` fresh
 --
 -- * i .. integer
 -- * n .. natural
--- * s .. with assertion 0 <= v <= 1
+-- * s .. with assertion v in {-1,0,1}
 ivarM', nvarM', sivarM', snvarM' :: SolverStM (Formula TInt) IExpr
 ivarM' = ivar `liftM` fresh
 

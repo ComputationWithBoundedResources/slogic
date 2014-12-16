@@ -3,6 +3,7 @@ module SLogic.Logic.Core
   (
   Formula (..)
   , Var
+  , Vars (..)
   , LEq (..)
 
   -- * standard interface
@@ -33,6 +34,7 @@ import           Control.Monad.Reader
 import           Data.Generics.Uniplate.Direct
 import qualified Data.Map.Strict               as M
 import           Data.Maybe                    (fromMaybe)
+import qualified Data.Set                          as S
 
 import           SLogic.Decode
 import           SLogic.Result
@@ -47,8 +49,10 @@ data Formula a
   | BVar Var
   | BVal Bool
   | Not (Formula a)
-  | And [Formula a]
-  | Or [Formula a]
+  -- MS: using list versions of And requires to handle empty lists
+  -- in SMT (and ) is invalid; so using the identity And [] = True may result in an unexpected behaviour
+  | And (Formula a) (Formula a)
+  | Or  (Formula a) (Formula a)
   | Ite (Formula a) (Formula a) (Formula a)
   | Implies (Formula a) (Formula a)
   | Eq (Formula a) (Formula a)
@@ -56,8 +60,8 @@ data Formula a
 
 instance Uniplate (Formula a) where
   uniplate (Not e)         = plate Not |* e
-  uniplate (And es)        = plate And ||* es
-  uniplate (Or es)         = plate Or ||* es
+  uniplate (And e1 e2)     = plate And |* e1 |* e2
+  uniplate (Or e1 e2)      = plate Or |* e1 |* e2
   uniplate (Ite e1 e2 e3)  = plate Ite |* e1 |* e2 |* e3
   uniplate (Implies e1 e2) = plate Implies |* e1 |* e2
   uniplate (Eq e1 e2)      = plate Eq |* e1 |* e2
@@ -69,13 +73,22 @@ instance Biplate (Formula a) (Formula a) where
 instance Uniplate a => Biplate (Formula a) a where
   biplate (Atom a)        = plate Atom |* a
   biplate (Not e)         = plate Not |+ e
-  biplate (And es)        = plate And ||+ es
-  biplate (Or es)         = plate Or ||+ es
+  biplate (And e1 e2)     = plate And |+ e1 |+ e2
+  biplate (Or e1 e2)      = plate Or |+ e1 |+ e2
   biplate (Ite e1 e2 e3)  = plate Ite |+ e1 |+ e2 |+ e3
   biplate (Implies e1 e2) = plate Implies |+ e1 |+ e2
   biplate (Eq e1 e2)      = plate Eq |+ e1 |+ e2
   biplate  x              = plate x
 
+class Vars e where
+  vars :: e -> S.Set (String, String)
+
+instance Vars e => Vars (Formula e) where
+  vars e = bvs `S.union` evs
+   where
+     evs = S.unions   [ vars a      | Atom a <- es ]
+     bvs = S.fromList [ (v,"Bool")  | BVar v <- es ]
+     es = universe e
 
 -- | Equality itself is considered as Formula.
 -- 'LEq' is used to lift equality between theory expressions.
@@ -101,13 +114,13 @@ bnot = Not
 
 -- | Boolean and; Boolean or.
 band, bor :: Formula a -> Formula a -> Formula a
-a `band` b = bigAnd [a,b]
-a `bor` b  = bigOr [a,b]
+band = And
+bor  = Or
 
 -- | List versions of 'band' and 'bor'.
 bigAnd, bigOr :: [Formula a] -> Formula a
-bigAnd = And
-bigOr  = Or
+bigAnd = foldl band top
+bigOr  = foldl bor bot
 
 -- | Boolean implication.
 implies :: Formula a -> Formula a -> Formula a
