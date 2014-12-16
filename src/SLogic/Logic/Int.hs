@@ -2,8 +2,7 @@
 module SLogic.Logic.Int
   (
   IExpr (..)
-  , TInt (..)
-  , simplify
+  , IFormula (..)
 
   -- * standard interface
   , tInt, ivar, tNat, nvar
@@ -51,43 +50,43 @@ data IExpr
   = IVar Var String -- ^ IVar id type; Type can be chosen; usually "Int" or "Nat"
   | IVal Int
   | Neg IExpr
-  | Add IExpr IExpr
-  | Mul IExpr IExpr
+  | Add [IExpr]
+  | Mul [IExpr]
   deriving (Eq, Ord, Show)
 
 instance Uniplate IExpr where
-  uniplate (Neg e) = plate Neg |* e
-  uniplate (Add e1 e2) = plate Add |* e1 |* e2
-  uniplate (Mul e1 e2) = plate Add |* e1 |* e2
+  uniplate (Neg e)  = plate Neg |* e
+  uniplate (Add es) = plate Add ||* es
+  uniplate (Mul es) = plate Add ||* es
   uniplate x        = plate x
 
 instance Biplate IExpr IExpr where
   biplate = plateSelf
 
--- | Inequality constraints over 'IExpr'.
-data TInt
-  = IExpr IExpr      -- necessary to lift equality; TODO: use dedicated symbol? together with pretty printing
-  | Lt IExpr IExpr
+-- | Constraints over 'IExpr'.
+data IFormula
+  = Lt IExpr IExpr
   | Lte IExpr IExpr
+  | IEq IExpr IExpr
   | Gte IExpr IExpr
   | Gt IExpr IExpr
   deriving (Eq, Ord, Show)
 
-instance Uniplate TInt where
+instance Uniplate IFormula where
   uniplate = plate
 
-instance Biplate TInt IExpr where
-  biplate (IExpr e)   = plate IExpr |* e
+instance Biplate IFormula IExpr where
   biplate (Lt e1 e2)  = plate Lt |* e1 |* e2
   biplate (Lte e1 e2) = plate Lte |* e1 |* e2
+  biplate (IEq e1 e2)  = plate Lt |* e1 |* e2
   biplate (Gte e1 e2) = plate Gte |* e1 |* e2
   biplate (Gt e1 e2)  = plate Gt |* e1 |* e2
 
-instance Vars TInt where
+instance Vars IFormula where
   vars e = S.fromList [ (v, ty) | IVar v ty <- universeBi e]
 
-instance LEq IExpr TInt where
-  e1 `leq` e2  = Atom (IExpr e1) `Eq` Atom (IExpr e2)
+instance LEq IExpr IFormula where
+  e1 `leq` e2  = Atom (e1 `IEq` e2)
 
 -- | Integer type.
 tInt :: String
@@ -118,30 +117,34 @@ scale :: Int -> IExpr -> IExpr
 scale i e = int i `mul` e
 
 
+-- MS: 
 mul, add, sub :: IExpr -> IExpr -> IExpr
-IVal a `mul` IVal b = IVal (a * b)
-a `mul` b
-  | a == zero || b == zero = zero
-  | a == one = b
-  | a == none = neg b
-  | b == one = a
-  | b == none = neg a
-  | otherwise = Mul a b
-  where none = neg one
-IVal a `add` IVal b = IVal (a + b)
-a `add` b
-  | a == zero = b
-  | b == zero = a
-  | a == neg b = zero
-  | otherwise = Add a b
+a `mul` b = Mul [a,b]
+a `add` b = Add [a,b]
+{-IVal a `mul` IVal b = IVal (a * b)-}
+{-a `mul` b-}
+  {-| a == one = b-}
+  {-| a == none = neg b-}
+  {-| b == one = a-}
+  {-| b == none = neg a-}
+  {-| otherwise = Mul (shallow a + shallow b)-}
+  {-where -}
+    {-none = neg one-}
+    {-shallow (Mul es)-}
+
+{-IVal a `add` IVal b = IVal (a + b)-}
+{-a `add` b-}
+  {-| a == zero = b-}
+  {-| b == zero = a-}
+  {-| otherwise = Add a b-}
 a `sub` b = a `add` neg b
 
 bigMul, bigAdd :: [IExpr] -> IExpr
-bigMul = foldl mul one
-bigAdd = foldl add zero
+bigMul = Mul
+bigAdd = Add
 
 
-lt, lte, gte, gt :: IExpr -> IExpr -> Formula TInt
+lt, lte, gte, gt :: IExpr -> IExpr -> Formula IFormula
 a `lt`  b = Atom (a `Lt` b)
 a `lte` b = Atom (a `Lte` b)
 a `gte` b = Atom (a `Gte` b)
@@ -157,7 +160,7 @@ a .- b = a `sub` b
 
 infix 4 .=<,.<,.>,.>=
 
-(.<),(.=<),(.>=),(.>) :: IExpr -> IExpr -> Formula TInt
+(.<),(.=<),(.>=),(.>) :: IExpr -> IExpr -> Formula IFormula
 a .<  b = a `lt` b
 a .=< b = a `lte` b
 a .>= b = a `gte` b
@@ -195,7 +198,7 @@ bigMulM es = bigMul  `liftM` sequence es
 bigAddM es = bigAdd  `liftM` sequence es
 
 
-ltM, lteM, gteM, gtM :: Monad m => m IExpr -> m IExpr -> m (Formula TInt)
+ltM, lteM, gteM, gtM :: Monad m => m IExpr -> m IExpr -> m (Formula IFormula)
 ltM  = liftM2 lte
 lteM = liftM2 lte
 gteM = liftM2 lte
@@ -204,27 +207,27 @@ gtM  = liftM2 lte
 
 -- * simplification
 
-simplify :: IExpr -> IExpr
-simplify = rewrite k
-  where
-    k (Neg (Neg e)) = Just e
-    k (Neg (Add e1 e2))  = Just $ Add (neg e1) (neg e2)
-    k (Neg (Mul e1 e2))  = Just $ Mul (neg e1) e2
+{-simplify :: IExpr -> IExpr-}
+{-simplify = rewrite k-}
+  {-where-}
+    {-k (Neg (Neg e)) = Just e-}
+    {-k (Neg (Add e1 e2))  = Just $ Add (neg e1) (neg e2)-}
+    {-k (Neg (Mul e1 e2))  = Just $ Mul (neg e1) e2-}
 
-    k (Mul (IVal i1) (IVal i2)) = Just $ IVal (i1 * i2)
-    k (Mul e1 e2)
-      | e1 == zero || e2 == zero = Just zero
-      | e1 == one = Just e2
-      | e1 == none = Just (neg e2)
-      | e2 == one = Just e1
-      | e2 == none = Just (neg e1)
-      where none = neg one
-    k (Add (IVal i1) (IVal i2)) = Just $ IVal (i1 + i2)
-    k (Add e1 e2)
-      | e1 == zero = Just e2
-      | e2 == zero = Just e1
-      | e1 == neg e2 = Just zero
-    k _ = Nothing
+    {-k (Mul (IVal i1) (IVal i2)) = Just $ IVal (i1 * i2)-}
+    {-k (Mul e1 e2)-}
+      {-| e1 == zero || e2 == zero = Just zero-}
+      {-| e1 == one = Just e2-}
+      {-| e1 == none = Just (neg e2)-}
+      {-| e2 == one = Just e1-}
+      {-| e2 == none = Just (neg e1)-}
+      {-where none = neg one-}
+    {-k (Add (IVal i1) (IVal i2)) = Just $ IVal (i1 + i2)-}
+    {-k (Add e1 e2)-}
+      {-| e1 == zero = Just e2-}
+      {-| e2 == zero = Just e1-}
+      {-| e1 == neg e2 = Just zero-}
+    {-k _ = Nothing-}
 
 
 
@@ -248,11 +251,11 @@ instance Decode (Reader (M.Map String Value)) IExpr Value where
     _        -> return Other
     where get v = asks $ \m -> error (notFound v) `fromMaybe` M.lookup v  m
 
-instance Decode (Reader (M.Map String Value)) TInt Value where
-  decode c = case c of
-    IExpr e -> decode e
-    _       -> err
-    where  err = error notLiteral
+{-instance Decode (Reader (M.Map String Value)) IFormula Value where-}
+  {-decode c = case c of-}
+    {-IExpr e -> decode e-}
+    {-_       -> err-}
+    {-where  err = error notLiteral-}
 
 instance Decode (Reader (M.Map String Value)) IExpr Int where
   decode c = case c of
@@ -261,9 +264,9 @@ instance Decode (Reader (M.Map String Value)) IExpr Int where
     _        -> error notLiteral
     where get v = asks $ \m -> maybe (error $ notFound v) fromValue (M.lookup v m)
 
-instance Decode (Reader (M.Map String Value)) TInt Int where
-  decode c = case c of
-    IExpr e -> decode e
-    _       -> err
-    where  err = error notLiteral
+{-instance Decode (Reader (M.Map String Value)) IFormula Int where-}
+  {-decode c = case c of-}
+    {-IExpr e -> decode e-}
+    {-_       -> err-}
+    {-where  err = error notLiteral-}
 

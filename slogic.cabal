@@ -39,6 +39,8 @@ library
     SLogic.Logic.Int 
     SLogic.Smt
     SLogic.Smt.Solver
+    --SLogic.Lp
+    --SLogic.Lp.Solver
     SLogic.SolverState
     SLogic.Solver
   hs-source-dirs:
@@ -48,8 +50,8 @@ library
     ansi-wl-pprint >= 0.6 && < 0.7,
     base           == 4.*,
     containers     >= 0.5 && < 0.6,
+    dlist          == 0.7.*,
     mtl            >= 2.1 && < 2.2,
-    pretty         >= 1.1,
     process        >= 1.1,
     uniplate       == 1.6.*
 

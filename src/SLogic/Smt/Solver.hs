@@ -1,5 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
--- | This module provides 'Solver' implementations for SMT.
+{-# LANGUAGE OverloadedStrings #-}
+-- | This module provides 'Solver' implementations for SMT - Formula IFormula
+--
 module SLogic.Smt.Solver
   (
   minismt
@@ -12,13 +14,13 @@ module SLogic.Smt.Solver
   , z3'
   ) where
 
-
-import qualified Data.Map.Strict                   as M
-import qualified Data.List as L
-import qualified Data.Set                          as S
+import Data.Monoid
+import qualified Data.DList as DL
+import qualified Data.List                    as L
+import qualified Data.Map.Strict              as M
+import qualified Data.Set                     as S
 import           System.Exit
 import           System.Process
-import qualified Text.PrettyPrint.ANSI.Leijen      as PP
 
 import           SLogic.Logic.Core
 import           SLogic.Logic.Int
@@ -27,153 +29,165 @@ import           SLogic.Solver
 import           SLogic.SolverState
 
 
--- default pretty printing
-ppIExpr :: IExpr-> PP.Doc
+type DString = DL.DList Char
+
+ppParens :: DString -> DString
+ppParens s = "(" <> s <> ")"
+
+ppList :: (a -> DString) -> [a]-> DString
+ppList _ []     = ""
+ppList f [a]    = f a
+ppList f (a:as) = f a <> " " <> ppList f as
+
+ppSExpr :: DString -> (a -> DString) -> [a]-> DString
+ppSExpr s f as = ppParens $ s <> " " <> ppList f as
+
+ppIExpr :: IExpr -> DString
 ppIExpr e = case e of
-  IVar v _  -> PP.text v
-  IVal i    -> PP.int i
-  Neg e1    -> ppsexpr "-"  [e1]
-  Add e1 e2 -> ppsexpr "+"  [e1,e2]
-  Mul e1 e2 -> ppsexpr "*"  [e1,e2]
-  where ppsexpr op es = PP.parens (PP.hsep $ PP.text op : map ppIExpr es)
+  IVar v _ -> DL.fromList v
+  IVal i   -> DL.fromList (show i)
+  Neg e1   -> ppParens $ "- " <> ppIExpr e1
+  Add es   -> ppSExpr "+" ppIExpr es
+  Mul es   -> ppSExpr "*" ppIExpr es
 
-ppTInt :: TInt -> PP.Doc
-ppTInt e = case e of
-  IExpr e1  -> ppIExpr e1
-  Lt e1 e2  -> ppbin "<" e1 e2
-  Lte e1 e2 -> ppbin "<=" e1 e2
-  Gte e1 e2 -> ppbin ">=" e1 e2
-  Gt e1 e2  -> ppbin ">" e1 e2
-  where ppbin op e1 e2 = PP.parens (PP.text op PP.<+> ppIExpr e1 PP.<+> ppIExpr e2)
+ppIFormula :: IFormula -> DString
+ppIFormula e = case e of
+  Lt e1 e2  -> pp "<" e1 e2
+  Lte e1 e2 -> pp "<=" e1 e2
+  IEq e1 e2 -> pp "=" e1 e2
+  Gte e1 e2 -> pp ">=" e1 e2
+  Gt e1 e2  -> pp ">" e1 e2
+  where pp s e1 e2 = ppSExpr s ppIExpr [e1,e2]
 
-ppExpr' :: Bool -> (e -> PP.Doc) -> Formula e -> PP.Doc
+ppExpr' :: Bool -> (e -> DString) -> Formula e -> DString
 ppExpr' isImplies ppAtom e = case e of
   Atom a        -> ppAtom a
-  BVar v        -> PP.text v
-  BVal b        -> PP.text (if b then "true" else "false")
-  Not e1        -> ppsexpr "not" [e1]
-  And e1 e2     -> ppsexpr "and" [e1,e2]
-  Or e1 e2      -> ppsexpr "or" [e1,e2]
-  Ite e1 e2 e3  -> ppsexpr "ite" [e1,e2,e3]
-  Implies e1 e2 -> ppsexpr (if isImplies then "implies" else "=>") [e1,e2]
-  Eq e1 e2      -> ppsexpr "=" [e1, e2]
-  where ppsexpr op es = PP.parens (PP.hsep $ PP.text op : map (ppExpr' isImplies ppAtom)  es)
+  BVar v        -> DL.fromList v
+  BVal b        -> if b then "true" else "false"
+  Not e1        -> pp "not" [e1]
+  And e1 e2     -> pp "and" [e1,e2]
+  Or e1 e2      -> pp "or" [e1,e2]
+  Ite e1 e2 e3  -> pp "ite" [e1,e2,e3]
+  Implies e1 e2 -> pp (if isImplies then "implies" else "=>") [e1,e2]
+  Eq e1 e2      -> pp "=" [e1, e2]
+  where pp s = ppSExpr s (ppExpr' isImplies ppAtom) 
 
-
-instance PP.Pretty TInt where
-  pretty = ppTInt
 
 -- pretty printing of smt commands
-ppSetLogic :: String -> PP.Doc
-ppSetLogic s = PP.parens (PP.text "set-logic" PP.<+> PP.text s)
+ppSetLogic :: String -> DString
+ppSetLogic s = "(set-logic " <> DL.fromList s <> ")"
 
-ppDeclareFun :: (Var, String) -> PP.Doc
-ppDeclareFun (v,ty) = PP.parens (PP.text "declare-fun" PP.<+> PP.text v PP.<+> PP.text "()" PP.<+> PP.text ty)
+ppDeclareFun :: (Var, String) -> DString
+ppDeclareFun (v,ty) = "(declare-fun " <> DL.fromList v <> " () " <> DL.fromList ty <> ")"
 
-ppAssert :: PP.Doc -> PP.Doc
-ppAssert a = PP.parens (PP.text "assert" PP.<+> a)
+ppDeclareFuns :: [(Var,String)] -> DString
+ppDeclareFuns [] = ""
+ppDeclareFuns as = foldr k "" as
+  where k a acc = acc <> "\n" <> ppDeclareFun a
 
-ppCheckSat :: PP.Doc
-ppCheckSat = PP.parens (PP.text "check-sat")
+ppAssert :: (a -> DString) -> a -> DString
+ppAssert f a = "(assert " <> f a <> ")"
 
-ppGetValues :: [Var] -> PP.Doc
-ppGetValues vs = PP.parens $ PP.text "get-value" PP.<+> PP.encloseSep PP.lparen PP.rparen PP.space (map PP.text vs)
+ppAsserts :: (a -> DString) -> [a] -> DString
+ppAsserts _ [] = ""
+ppAsserts f as = foldr k "" as
+  where k a acc = "\n" <> ppAssert f a <> acc
+
+ppCheckSat :: DString
+ppCheckSat = "\n(check-sat)"
+
+ppGetValues :: [Var] -> DString
+ppGetValues [] = ""
+ppGetValues vs = "\n(get-value " <> ppParens (ppList DL.fromList vs) <> ")"
+  
 
 
--- MS: 
+-- MS:
 -- minismt format differs a bit from the smt2 standard
--- implication: "implies" instead of "=>"
--- (get-value (fn)) returns a parse error; to get a model use -m 
--- since minismt 0.6; the second line displays the time
+-- * supports Nat type
+-- * implication: "implies" instead of "=>"
+-- * (get-value (fn)) returns a parse error; to get a model use -m
+-- * since minismt 0.6; the second line displays the time
+--
 -- TODO: insert version check
-newtype Minismt f = Minismt f
 
-ppExprMinismt :: PP.Pretty e => Formula e -> PP.Doc
-ppExprMinismt = ppExpr' True PP.pretty
 
-instance PP.Pretty (Minismt (SolverState ( Formula TInt))) where
-  pretty (Minismt st) =
-    ppSetLogic (format st)
-    PP.<$> PP.vcat (map ppDeclareFun allvars)
-    PP.<$> PP.vcat (map (ppAssert . ppExprMinismt) (reverse $ asserts st))
-    PP.<$> ppCheckSat
-    PP.<$> PP.empty
-    where allvars = S.toList $ foldl (\s -> S.union s . vars) S.empty (asserts st)
+ppMinismt :: SolverState (Formula IFormula) -> String
+ppMinismt st = DL.toList $ 
+  ppSetLogic (format st)
+  <> ppDeclareFuns allvars
+  <> ppAsserts (ppExpr' True ppIFormula) (asserts st)
+  <> ppCheckSat
+  where allvars = S.toList $ foldl (\s -> S.union s . vars) S.empty (asserts st)
 
 -- | Default minismt solver.
-minismt :: Solver (SolverState (Formula TInt))
+minismt :: Solver (SolverState (Formula IFormula))
 minismt = minismt' ["-m","-v2"]
 
 -- | Minismt solver. Constructs the problem from 'SolverState'.
-minismt' :: [String] -> Solver (SolverState (Formula TInt))
+minismt' :: [String] -> Solver (SolverState (Formula IFormula))
 minismt' args st = do
-  let input = show $ PP.pretty (Minismt st)
+  let input = ppMinismt st
   writeFile "/tmp/fm.smt2" input
   (code , stdout, stderr) <- readProcessWithExitCode "minismt" args input
   return $ case code of
     ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
     ExitSuccess   -> case lines stdout of
-      "sat"   : _ : xs  -> Sat . M.fromList $ map parse xs
-      "unsat" : _       -> Unsat
-      "unknown" : _     -> Unknown
-      "parse error" : _ -> Error "minismt: parse error"
-      _                 -> Error "some error"
+      "sat"   : _ : xs -> Sat . M.fromList $ map parse xs
+      "unsat" : _      -> Unsat
+      "unknown" : _    -> Unknown
+      _                -> Error stdout
   where
     parse line = (var, read (tail val)::Value)
       where (var,val) = break (== '=') $ filter (/=' ') line
 
 
--- Smt2 Standard
--- MS: replace IVar v Nat with IVar v Int + assertion v >= 0
-newtype Smt2 f = Smt2 f
-
-ppExprSmt2 :: PP.Pretty e => Formula e -> PP.Doc
-ppExprSmt2 = ppExpr' False PP.pretty
-
-instance PP.Pretty (Smt2 (SolverState (Formula TInt))) where
-  pretty (Smt2 st) =
+-- smt2lib Standard
+-- does not support Nat as available in Formula IFormula
+-- hence, we declare each Nat variable as Int and add an additional assertion
+ppSmt2 ::  SolverState (Formula IFormula) -> String
+ppSmt2 st = DL.toList $ 
     ppSetLogic (format st)
-    PP.<$> PP.vcat (map ppDeclareFun varsL)
-    PP.<$> PP.vcat (map ppDeclareFun natsL)
-    PP.<$> PP.vcat (map (ppAssert . ppExprSmt2) (reverse $ asserts st))
-    PP.<$> PP.vcat (map (ppAssert . ppExprSmt2 . nat) natsL)
-    PP.<$> ppCheckSat
-    PP.<$> ppGetValues (map fst varsL)
-    PP.<$> ppGetValues (map fst natsL)
-    PP.<$> PP.empty
-    where 
+    <> ppDeclareFuns varsL
+    <> ppDeclareFuns natsL
+    <> ppAsserts (ppExpr' False ppIFormula) (asserts st)
+    <> ppAsserts (ppExpr' False ppIFormula) (map nat natsL)
+    <> ppCheckSat
+    <> ppGetValues (map fst varsL)
+    <> ppGetValues (map fst natsL)
+    where
       allvarsS      = foldl (\s -> S.union s . vars) S.empty (asserts st)
       (varsS,natsS) = S.partition ((== "Nat") . snd) allvarsS
       varsL = S.toList varsS
       natsL = map (\(v,_) -> (v,"Int")) $ S.toList natsS
       nat (v,ty) = IVar v ty .>= IVal 0
 
-smt2 :: String -> [String] -> Solver (SolverState (Formula TInt))
+smt2 :: String -> [String] -> Solver (SolverState (Formula IFormula))
 smt2 p args st = do
-  let input = show $ PP.pretty (Smt2 st)
+  let input = ppSmt2 st
   writeFile "/tmp/fm.smt2" input
   (code , stdout, stderr) <- readProcessWithExitCode p args input
   return $ case code of
     ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
     ExitSuccess   -> case lines stdout of
-      "sat"   : xs      -> Sat . M.fromList $ map parse xs
-      "unsat" : _       -> Unsat
-      "unknown" : _     -> Unknown
-      _                 -> Error "some error"
+      "sat"   : xs  -> Sat . M.fromList $ map parse xs
+      "unsat" : _   -> Unsat
+      "unknown" : _ -> Unknown
+      _             -> Error stdout
   where
     parse line = (var, read (tail val)::Value)
       where (var,val) = break (== ' ') . filter (`L.notElem` "()") $ dropWhile (==' ') line
 
 
-yices :: Solver (SolverState (Formula TInt))
+yices :: Solver (SolverState (Formula IFormula))
 yices = yices' []
 
-yices' :: [String] -> Solver (SolverState (Formula TInt))
+yices' :: [String] -> Solver (SolverState (Formula IFormula))
 yices' = smt2 "yices-smt2"
 
-z3 :: Solver (SolverState (Formula TInt))
-z3 = z3' []
+z3 :: Solver (SolverState (Formula IFormula))
+z3 = z3' ["-smt2","-in"]
 
-z3' :: [String] -> Solver (SolverState (Formula TInt))
+z3' :: [String] -> Solver (SolverState (Formula IFormula))
 z3' = smt2 "z3"
 
