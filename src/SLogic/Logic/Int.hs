@@ -6,12 +6,12 @@ module SLogic.Logic.Int
 
   -- * standard interface
   , tInt, ivar, tNat, nvar
-  , zero, one, int
+  , zero, one, num
   , neg
   , scale, mul
   , add, sub
-  , bigMul
-  , bigAdd
+  , bigMul, bigMul'
+  , bigAdd, bigAdd'
 
   , lt, lte, gte, gt
 
@@ -22,12 +22,12 @@ module SLogic.Logic.Int
 
   -- * monadic interface
   , ivarM, nvarM
-  , zeroM, oneM, intM
+  , zeroM, oneM, numM
   , negM
   , scaleM, mulM
   , addM, subM
-  , bigMulM
-  , bigAddM
+  , bigMulM, bigMulM'
+  , bigAddM, bigAddM'
 
   , ltM, lteM, gteM, gtM
   ) where
@@ -57,7 +57,7 @@ data IExpr
 instance Uniplate IExpr where
   uniplate (Neg e)  = plate Neg |* e
   uniplate (Add es) = plate Add ||* es
-  uniplate (Mul es) = plate Add ||* es
+  uniplate (Mul es) = plate Mul ||* es
   uniplate x        = plate x
 
 instance Biplate IExpr IExpr where
@@ -78,7 +78,7 @@ instance Uniplate IFormula where
 instance Biplate IFormula IExpr where
   biplate (Lt e1 e2)  = plate Lt |* e1 |* e2
   biplate (Lte e1 e2) = plate Lte |* e1 |* e2
-  biplate (IEq e1 e2)  = plate Lt |* e1 |* e2
+  biplate (IEq e1 e2) = plate IEq |* e1 |* e2
   biplate (Gte e1 e2) = plate Gte |* e1 |* e2
   biplate (Gt e1 e2)  = plate Gt |* e1 |* e2
 
@@ -102,46 +102,64 @@ ivar, nvar :: Var -> IExpr
 ivar v = IVar v tInt
 nvar v = IVar v tNat
 
-zero, one :: IExpr
-zero = int 0
-one  = int 1
+zero, one, none :: IExpr
+zero = num 0
+one  = num 1
+none = neg one
 
-int :: Int -> IExpr
-int = IVal
+num :: Int -> IExpr
+num i = if i < 0 then neg (IVal (-i)) else IVal i
 
 -- push negations down
 neg :: IExpr -> IExpr
-neg = Neg
+neg (Neg e)      = e
+neg e            = Neg e
 
 scale :: Int -> IExpr -> IExpr
-scale i e = int i `mul` e
+scale i e = num i `mul` e
 
 
--- MS: 
+-- MS: simplifications should not annihilate expressions; or in particular variables, as variable declarations depend
+-- on the expression itself.
 mul, add, sub :: IExpr -> IExpr -> IExpr
-a `mul` b = Mul [a,b]
-a `add` b = Add [a,b]
-{-IVal a `mul` IVal b = IVal (a * b)-}
-{-a `mul` b-}
-  {-| a == one = b-}
-  {-| a == none = neg b-}
-  {-| b == one = a-}
-  {-| b == none = neg a-}
-  {-| otherwise = Mul (shallow a + shallow b)-}
-  {-where -}
-    {-none = neg one-}
-    {-shallow (Mul es)-}
-
-{-IVal a `add` IVal b = IVal (a + b)-}
-{-a `add` b-}
-  {-| a == zero = b-}
-  {-| b == zero = a-}
-  {-| otherwise = Add a b-}
+a `mul` b
+  | a == one = b
+  | b == one = a
+  | a == none = neg b
+  | b == none = neg a
+  | otherwise = Mul (k a ++ k b)
+  where
+    k (Mul es) = es
+    k e        = [e]
+a `add` b 
+  | a == zero = b
+  | b == zero = a
+  | otherwise = Add (k a ++ k b)
+  where
+    k (Add es) = es
+    k e        = [e]
 a `sub` b = a `add` neg b
 
+-- | List version of 'mul' and 'add'. The default behaviour for empty lists depends on the background-solver.
+-- ie. bigAdd [] translates to (* ) for smt, which is an invalid expression. Defaulting this to @0@ may lead for
+-- unexpected results.
+-- 
+-- prop> bigMul [] = Mul []
 bigMul, bigAdd :: [IExpr] -> IExpr
-bigMul = Mul
-bigAdd = Add
+bigMul [] = Mul []
+bigMul es = foldl1 mul es
+bigAdd [] = Add []
+bigAdd es = foldl1 add es
+
+-- | Like 'bigMul' and 'bigAdd' but with defaulting behaviour.
+--
+-- prop> bigMul' [] = one
+-- prop> bigAdd' [] = zero
+bigMul', bigAdd' :: [IExpr] -> IExpr
+bigMul' [] = one
+bigMul' es = bigMul es
+bigAdd' [] = zero
+bigAdd' es = bigAdd es
 
 
 lt, lte, gte, gt :: IExpr -> IExpr -> Formula IFormula
@@ -177,15 +195,15 @@ zeroM, oneM :: Monad m => m IExpr
 zeroM = return zero
 oneM = return one
 
-intM :: Monad m => Int -> m IExpr
-intM = return . int
+numM :: Monad m => Int -> m IExpr
+numM = return . num
 
 
 negM :: Monad m => m IExpr -> m IExpr
 negM = liftM neg
 
 scaleM :: Monad m => Int -> m IExpr -> m IExpr
-scaleM i e = (int i `mul`) `liftM` e
+scaleM i e = (num i `mul`) `liftM` e
 
 
 mulM, addM, subM :: Monad m => m IExpr -> m IExpr -> m IExpr
@@ -197,12 +215,16 @@ bigMulM, bigAddM :: Monad m => [m IExpr] -> m IExpr
 bigMulM es = bigMul  `liftM` sequence es
 bigAddM es = bigAdd  `liftM` sequence es
 
+bigMulM', bigAddM' :: Monad m => [m IExpr] -> m IExpr
+bigMulM' es = bigMul' `liftM` sequence es
+bigAddM' es = bigAdd' `liftM` sequence es
+
 
 ltM, lteM, gteM, gtM :: Monad m => m IExpr -> m IExpr -> m (Formula IFormula)
-ltM  = liftM2 lte
+ltM  = liftM2 lt
 lteM = liftM2 lte
-gteM = liftM2 lte
-gtM  = liftM2 lte
+gteM = liftM2 gte
+gtM  = liftM2 gt
 
 
 -- * simplification

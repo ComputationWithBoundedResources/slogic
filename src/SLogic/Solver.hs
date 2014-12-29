@@ -74,7 +74,7 @@ newtype Memo a e m r =  Memo { runMemo :: StateT (M.Map a e) m r}
   deriving (Functor, Applicative, Monad, MonadTrans, MonadIO, MonadState (M.Map a e))
 
 -- | Memo 'SolverM' Monad.
-type MemoSolverM a e r = Memo a e (SolverM e) r
+type MemoSolverM a e r = Memo a r (SolverM e) r
 
 -- | Evaluates 'Memo' monad.
 memo :: Monad m => Memo a e m r -> m (r, M.Map a e)

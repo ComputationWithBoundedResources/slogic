@@ -1,7 +1,5 @@
 -- | This module provides the decoding mechanism.
-module SLogic.Decode 
-  (Decode (..))
-  where
+module SLogic.Decode where
 
 
 import           Control.Monad

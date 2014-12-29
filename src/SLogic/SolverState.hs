@@ -16,6 +16,7 @@ module SLogic.SolverState
 
   , ivar, nvar
   , ivarM', nvarM', sivarM', snvarM'
+  , ivarMO, nvarMO, sivarMO, snvarMO
   ) where
 
 
@@ -105,9 +106,9 @@ snvarM' = do
   assert $ v .=< one
   return v
 
-{-ivarMO, nvarMO, sivarMO, snvarMO :: Ord a => a -> MemoSolverM a (Formula TInt) IExpr-}
-{-ivarMO  = memoized $ \_ -> lift ivarM'-}
-{-nvarMO  = memoized $ \_ -> lift nvarM'-}
-{-sivarMO = memoized $ \_ -> lift sivarM'-}
-{-snvarMO = memoized $ \_ -> lift snvarM'-}
+ivarMO, nvarMO, sivarMO, snvarMO :: Ord a => a -> MemoSolverM a (SolverState (Formula IFormula)) IExpr
+ivarMO  = memoized $ \_ -> lift ivarM'
+nvarMO  = memoized $ \_ -> lift nvarM'
+sivarMO = memoized $ \_ -> lift sivarM'
+snvarMO = memoized $ \_ -> lift snvarM'
 

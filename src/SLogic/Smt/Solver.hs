@@ -157,7 +157,7 @@ ppSmt2 st = DL.toList $
     <> ppGetValues (map fst natsL)
     where
       allvarsS      = foldl (\s -> S.union s . vars) S.empty (asserts st)
-      (varsS,natsS) = S.partition ((== "Nat") . snd) allvarsS
+      (natsS,varsS) = S.partition ((== "Nat") . snd) allvarsS
       varsL = S.toList varsS
       natsL = map (\(v,_) -> (v,"Int")) $ S.toList natsS
       nat (v,ty) = IVar v ty .>= IVal 0
