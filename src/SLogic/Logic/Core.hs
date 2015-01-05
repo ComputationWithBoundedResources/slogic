@@ -49,10 +49,8 @@ data Formula a
   | BVar Var
   | BVal Bool
   | Not (Formula a)
-  -- MS: using list versions of And requires to handle empty lists
-  -- in SMT (and ) is invalid; so using the identity And [] = True may result in an unexpected behaviour
-  | And (Formula a) (Formula a)
-  | Or  (Formula a) (Formula a)
+  | And [Formula a]
+  | Or  [Formula a]
   | Ite (Formula a) (Formula a) (Formula a)
   | Implies (Formula a) (Formula a)
   | Eq (Formula a) (Formula a)
@@ -60,8 +58,8 @@ data Formula a
 
 instance Uniplate (Formula a) where
   uniplate (Not e)         = plate Not |* e
-  uniplate (And e1 e2)     = plate And |* e1 |* e2
-  uniplate (Or e1 e2)      = plate Or |* e1 |* e2
+  uniplate (And es)        = plate And ||* es
+  uniplate (Or es)         = plate Or ||* es
   uniplate (Ite e1 e2 e3)  = plate Ite |* e1 |* e2 |* e3
   uniplate (Implies e1 e2) = plate Implies |* e1 |* e2
   uniplate (Eq e1 e2)      = plate Eq |* e1 |* e2
@@ -73,8 +71,8 @@ instance Biplate (Formula a) (Formula a) where
 instance Uniplate a => Biplate (Formula a) a where
   biplate (Atom a)        = plate Atom |* a
   biplate (Not e)         = plate Not |+ e
-  biplate (And e1 e2)     = plate And |+ e1 |+ e2
-  biplate (Or e1 e2)      = plate Or |+ e1 |+ e2
+  biplate (And es)        = plate And ||+ es
+  biplate (Or es)         = plate Or ||+ es
   biplate (Ite e1 e2 e3)  = plate Ite |+ e1 |+ e2 |+ e3
   biplate (Implies e1 e2) = plate Implies |+ e1 |+ e2
   biplate (Eq e1 e2)      = plate Eq |+ e1 |+ e2
@@ -114,13 +112,18 @@ bnot = Not
 
 -- | Boolean and; Boolean or.
 band, bor :: Formula a -> Formula a -> Formula a
-band = And
-bor  = Or
+a `band` b = And [a,b]
+a `bor`  b = Or [a,b]
 
 -- | List versions of 'band' and 'bor'.
+--
+-- prop> bigAnd [] = top
+-- prop> bigOr []  = bot
 bigAnd, bigOr :: [Formula a] -> Formula a
-bigAnd = foldl band top
-bigOr  = foldl bor bot
+bigAnd [] = top
+bigAnd es = And es
+bigOr  [] = bot
+bigOr  es = Or es
 
 -- | Boolean implication.
 implies :: Formula a -> Formula a -> Formula a

@@ -65,8 +65,8 @@ ppExpr' isImplies ppAtom e = case e of
   BVar v        -> DL.fromList v
   BVal b        -> if b then "true" else "false"
   Not e1        -> pp "not" [e1]
-  And e1 e2     -> pp "and" [e1,e2]
-  Or e1 e2      -> pp "or" [e1,e2]
+  And es        -> pp "and" es
+  Or es         -> pp "or" es
   Ite e1 e2 e3  -> pp "ite" [e1,e2,e3]
   Implies e1 e2 -> pp (if isImplies then "implies" else "=>") [e1,e2]
   Eq e1 e2      -> pp "=" [e1, e2]

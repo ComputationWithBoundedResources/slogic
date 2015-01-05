@@ -208,8 +208,8 @@ scaleM i e = (num i `mul`) `liftM` e
 
 mulM, addM, subM :: Monad m => m IExpr -> m IExpr -> m IExpr
 mulM = liftM2 mul
-addM = liftM2 mul
-subM = liftM2 mul
+addM = liftM2 add
+subM = liftM2 sub
 
 bigMulM, bigAddM :: Monad m => [m IExpr] -> m IExpr
 bigMulM es = bigMul  `liftM` sequence es
@@ -285,6 +285,15 @@ instance Decode (Reader (M.Map String Value)) IExpr Int where
     IVar v _ -> get v
     _        -> error notLiteral
     where get v = asks $ \m -> maybe (error $ notFound v) fromValue (M.lookup v m)
+    {-where get v = asks $ \m -> maybe (-666) fromValue (M.lookup v m)-}
+
+
+instance Decode (Reader (M.Map String Value)) IExpr (Default Int) where
+  decode c = case c of
+    IVal i   -> return (Default i)
+    IVar v _ -> get v
+    _        -> error notLiteral
+    where get v = asks $ \m -> (Default . maybe 0 fromValue) (M.lookup v m)
 
 {-instance Decode (Reader (M.Map String Value)) IFormula Int where-}
   {-decode c = case c of-}

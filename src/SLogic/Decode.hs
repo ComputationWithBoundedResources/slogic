@@ -25,6 +25,8 @@ instance Decode m a b => Decode m (Maybe a) (Maybe b) where
   decode (Just b) = liftM Just (decode b)
   decode Nothing  = return Nothing
 
+newtype Default a = Default { runDefault :: a }
+
 instance (Ord i, Decode m c a) => Decode m (M.Map i c) (M.Map i a) where
   decode x = do
     pairs <- sequence $ do
