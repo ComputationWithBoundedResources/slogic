@@ -128,7 +128,7 @@ minismt = minismt' ["-m","-v2"]
 minismt' :: [String] -> Solver (SolverState (Formula IFormula))
 minismt' args st = do
   let input = ppMinismt st
-  writeFile "/tmp/fm.smt2" input
+  {-writeFile "/tmp/fm.smt2" input-}
   (code , stdout, stderr) <- readProcessWithExitCode "minismt" args input
   return $ case code of
     ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
@@ -165,7 +165,7 @@ ppSmt2 st = DL.toList $
 smt2 :: String -> [String] -> Solver (SolverState (Formula IFormula))
 smt2 p args st = do
   let input = ppSmt2 st
-  writeFile "/tmp/fm.smt2" input
+  {-writeFile "/tmp/fm.smt2" input-}
   (code , stdout, stderr) <- readProcessWithExitCode p args input
   return $ case code of
     ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"

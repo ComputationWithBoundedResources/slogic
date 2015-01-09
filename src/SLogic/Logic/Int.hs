@@ -227,32 +227,6 @@ gteM = liftM2 gte
 gtM  = liftM2 gt
 
 
--- * simplification
-
-{-simplify :: IExpr -> IExpr-}
-{-simplify = rewrite k-}
-  {-where-}
-    {-k (Neg (Neg e)) = Just e-}
-    {-k (Neg (Add e1 e2))  = Just $ Add (neg e1) (neg e2)-}
-    {-k (Neg (Mul e1 e2))  = Just $ Mul (neg e1) e2-}
-
-    {-k (Mul (IVal i1) (IVal i2)) = Just $ IVal (i1 * i2)-}
-    {-k (Mul e1 e2)-}
-      {-| e1 == zero || e2 == zero = Just zero-}
-      {-| e1 == one = Just e2-}
-      {-| e1 == none = Just (neg e2)-}
-      {-| e2 == one = Just e1-}
-      {-| e2 == none = Just (neg e1)-}
-      {-where none = neg one-}
-    {-k (Add (IVal i1) (IVal i2)) = Just $ IVal (i1 + i2)-}
-    {-k (Add e1 e2)-}
-      {-| e1 == zero = Just e2-}
-      {-| e2 == zero = Just e1-}
-      {-| e1 == neg e2 = Just zero-}
-    {-k _ = Nothing-}
-
-
-
 -- * decoding
 
 fromValue :: Value -> Int
@@ -265,6 +239,19 @@ notFound v = "SmtLib.Smt.Int.decode.asks: variable " ++ v ++" not found."
 notLiteral :: String
 notLiteral = "SmtLib.Smt.Int.decode: not a literal."
 
+instance Decode (Reader (M.Map String Value)) IExpr (Maybe Value) where
+  decode c = case c of
+    IVal i   -> return (Just (IntVal i))
+    IVar v _ -> get v
+    _        -> return (Just Other)
+    where get v = asks $ \m -> M.lookup v  m
+
+instance Decode (Reader (M.Map String Value)) IExpr (Maybe Int) where
+  decode c = case c of
+    IVal i   -> return (Just i)
+    IVar v _ -> get v
+    _        -> error notLiteral
+    where get v = asks $ \m -> liftM fromValue (M.lookup v m)
 
 instance Decode (Reader (M.Map String Value)) IExpr Value where
   decode c = case c of
@@ -273,31 +260,10 @@ instance Decode (Reader (M.Map String Value)) IExpr Value where
     _        -> return Other
     where get v = asks $ \m -> error (notFound v) `fromMaybe` M.lookup v  m
 
-{-instance Decode (Reader (M.Map String Value)) IFormula Value where-}
-  {-decode c = case c of-}
-    {-IExpr e -> decode e-}
-    {-_       -> err-}
-    {-where  err = error notLiteral-}
-
 instance Decode (Reader (M.Map String Value)) IExpr Int where
   decode c = case c of
     IVal i   -> return i
     IVar v _ -> get v
     _        -> error notLiteral
     where get v = asks $ \m -> maybe (error $ notFound v) fromValue (M.lookup v m)
-    {-where get v = asks $ \m -> maybe (-666) fromValue (M.lookup v m)-}
-
-
-instance Decode (Reader (M.Map String Value)) IExpr (Default Int) where
-  decode c = case c of
-    IVal i   -> return (Default i)
-    IVar v _ -> get v
-    _        -> error notLiteral
-    where get v = asks $ \m -> (Default . maybe 0 fromValue) (M.lookup v m)
-
-{-instance Decode (Reader (M.Map String Value)) IFormula Int where-}
-  {-decode c = case c of-}
-    {-IExpr e -> decode e-}
-    {-_       -> err-}
-    {-where  err = error notLiteral-}
 

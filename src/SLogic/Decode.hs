@@ -2,6 +2,7 @@
 module SLogic.Decode where
 
 
+import qualified Data.Traversable as F
 import           Control.Monad
 import qualified Data.Map.Strict as M
 
@@ -25,13 +26,6 @@ instance Decode m a b => Decode m (Maybe a) (Maybe b) where
   decode (Just b) = liftM Just (decode b)
   decode Nothing  = return Nothing
 
-newtype Default a = Default { runDefault :: a }
-
 instance (Ord i, Decode m c a) => Decode m (M.Map i c) (M.Map i a) where
-  decode x = do
-    pairs <- sequence $ do
-      (i,e) <- M.assocs x
-      return $ do
-        f <- decode e
-        return (i,f)
-    return $ M.fromList pairs
+  decode m = F.sequence $ M.map decode m
+
