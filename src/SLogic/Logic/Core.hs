@@ -2,7 +2,8 @@
 module SLogic.Logic.Core
   (
   Formula (..)
-  , Var
+  , Var, strVar, varStr
+  , VType, strVType, vtypeStr
   , Vars (..)
   , LEq (..)
 
@@ -29,6 +30,7 @@ module SLogic.Logic.Core
   ) where
 
 
+import qualified Data.ByteString.Char8 as BS
 import           Control.Monad
 import           Control.Monad.Reader
 import           Data.Generics.Uniplate.Direct
@@ -41,7 +43,16 @@ import           SLogic.Result
 
 
 -- | Variable type.
-type Var = String
+type Var = BS.ByteString
+type VType = BS.ByteString
+
+varStr,vtypeStr :: Var -> String
+varStr   = BS.unpack
+vtypeStr = BS.unpack
+
+strVar, strVType :: String -> Var
+strVar   = BS.pack
+strVType = BS.pack
 
 -- | Defines sat formula modulo some theory and equality.
 data Formula a
@@ -79,13 +90,13 @@ instance Uniplate a => Biplate (Formula a) a where
   biplate  x              = plate x
 
 class Vars e where
-  vars :: e -> S.Set (String, String)
+  vars :: e -> S.Set (Var, VType)
 
 instance Vars e => Vars (Formula e) where
   vars e = bvs `S.union` evs
    where
      evs = S.unions   [ vars a      | Atom a <- es ]
-     bvs = S.fromList [ (v,"Bool")  | BVar v <- es ]
+     bvs = S.fromList [ (v, BS.pack "Bool")  | BVar v <- es ]
      es = universe e
 
 -- | Equality itself is considered as Formula.
@@ -94,8 +105,8 @@ class LEq a e where
   leq :: a -> a -> Formula e
 
 -- | Returns a Boolean variable with the given id.
-bvar :: Var -> Formula a
-bvar = BVar
+bvar :: String -> Formula a
+bvar = BVar . strVar
 
 -- | Returns a Boolean value.
 bool :: Bool -> Formula a
@@ -165,7 +176,7 @@ a .|| b = a `bor` b
 
 
 -- * monadic interface
-bvarM :: Monad m => Var -> m (Formula a)
+bvarM :: Monad m => String -> m (Formula a)
 bvarM = return .  bvar
 
 boolM :: Monad m => Bool -> m (Formula a)
@@ -209,7 +220,7 @@ notFound v = "SmtLib.Logic.Core.decode.asks: variable " ++ v ++" not found."
 notLiteral :: String
 notLiteral = "SmtLib.Logic.Core.decode: not a literal."
 
-instance Decode (Reader (M.Map String Value)) e Value => Decode (Reader (M.Map String Value)) (Formula e) Value where
+instance Decode (Reader (M.Map Var Value)) e Value => Decode (Reader (M.Map Var Value)) (Formula e) Value where
   decode c = case c of
     Atom a -> decode a
     BVal b -> return (BoolVal b)
@@ -217,10 +228,10 @@ instance Decode (Reader (M.Map String Value)) e Value => Decode (Reader (M.Map S
     _      -> return Other
     where get v = asks $ \m -> Other `fromMaybe` M.lookup v  m
 
-instance Decode (Reader (M.Map String Value)) (Formula e) Bool where
+instance Decode (Reader (M.Map Var Value)) (Formula e) Bool where
   decode c = case c of
     BVal b -> return b
     BVar v -> get v
     _      -> error notLiteral
-    where get v = asks $ \m -> maybe (error $ notFound v) fromValue (M.lookup v m)
+    where get v = asks $ \m -> maybe (error . notFound $ varStr v) fromValue (M.lookup v m)
 

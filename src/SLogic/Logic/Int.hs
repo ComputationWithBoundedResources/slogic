@@ -33,6 +33,7 @@ module SLogic.Logic.Int
   ) where
 
 
+import qualified Data.ByteString.Char8 as BS
 import           Control.Monad
 import           Control.Monad.Reader
 import           Data.Generics.Uniplate.Direct
@@ -47,7 +48,7 @@ import           SLogic.Result
 
 -- | Defines expressions over the integers.
 data IExpr
-  = IVar Var String -- ^ IVar id type; Type can be chosen; usually "Int" or "Nat"
+  = IVar Var VType -- ^ IVar id type; Type can be chosen; usually "Int" or "Nat"
   | IVal Int
   | Neg IExpr
   | Add [IExpr]
@@ -89,18 +90,18 @@ instance LEq IExpr IFormula where
   e1 `leq` e2  = Atom (e1 `IEq` e2)
 
 -- | Integer type.
-tInt :: String
-tInt = "Int"
+tInt :: VType
+tInt = BS.pack "Int"
 
 -- | Natural type. Nat is not part of the smtlib2-standard but handled internally.
-tNat :: String
-tNat = "Nat"
+tNat :: VType
+tNat = BS.pack "Nat"
 
 
 -- | Provides integer variables of type 'tInt' and 'tNat'.
-ivar, nvar :: Var -> IExpr
-ivar v = IVar v tInt
-nvar v = IVar v tNat
+ivar, nvar :: String -> IExpr
+ivar v = IVar (strVar v) tInt
+nvar v = IVar (strVar v) tNat
 
 zero, one, none :: IExpr
 zero = num 0
@@ -187,7 +188,7 @@ a .>  b = a `gt` b
 
 -- * monadic interface
 
-ivarM, nvarM :: Monad m => Var -> m IExpr
+ivarM, nvarM :: Monad m => String -> m IExpr
 ivarM = return . ivar
 nvarM = return . nvar
 
@@ -239,31 +240,31 @@ notFound v = "SmtLib.Smt.Int.decode.asks: variable " ++ v ++" not found."
 notLiteral :: String
 notLiteral = "SmtLib.Smt.Int.decode: not a literal."
 
-instance Decode (Reader (M.Map String Value)) IExpr (Maybe Value) where
+instance Decode (Reader (M.Map Var Value)) IExpr (Maybe Value) where
   decode c = case c of
     IVal i   -> return (Just (IntVal i))
     IVar v _ -> get v
     _        -> return (Just Other)
     where get v = asks $ \m -> M.lookup v  m
 
-instance Decode (Reader (M.Map String Value)) IExpr (Maybe Int) where
+instance Decode (Reader (M.Map Var Value)) IExpr (Maybe Int) where
   decode c = case c of
     IVal i   -> return (Just i)
     IVar v _ -> get v
     _        -> error notLiteral
     where get v = asks $ \m -> liftM fromValue (M.lookup v m)
 
-instance Decode (Reader (M.Map String Value)) IExpr Value where
+instance Decode (Reader (M.Map Var Value)) IExpr Value where
   decode c = case c of
     IVal i   -> return (IntVal i)
     IVar v _ -> get v
     _        -> return Other
-    where get v = asks $ \m -> error (notFound v) `fromMaybe` M.lookup v  m
+    where get v = asks $ \m -> error (notFound $ varStr v) `fromMaybe` M.lookup v  m
 
-instance Decode (Reader (M.Map String Value)) IExpr Int where
+instance Decode (Reader (M.Map Var Value)) IExpr Int where
   decode c = case c of
     IVal i   -> return i
     IVar v _ -> get v
     _        -> error notLiteral
-    where get v = asks $ \m -> maybe (error $ notFound v) fromValue (M.lookup v m)
+    where get v = asks $ \m -> maybe (error . notFound $ varStr v) fromValue (M.lookup v m)
 

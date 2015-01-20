@@ -12,24 +12,6 @@ description:
 cabal-version:       >=1.8
 build-type:          Simple
 
--- executable smt
---   main-is:
---     Main.hs
--- 
---   hs-source-dirs:
---     src
--- 
---   build-depends:       
---     base       == 4.*,
---     containers >= 0.5,
---     mtl        == 2.1.*, 
---     pretty     >= 1.1,
---     process    >= 1.1,
---     smtLib     >= 1.0.6
--- 
---   ghc-options:
---     -O -funbox-strict-fields -threaded
-    
 library
   exposed-modules:
     SLogic.Decode
@@ -49,10 +31,11 @@ library
   build-depends:       
     ansi-wl-pprint >= 0.6 && < 0.7,
     base           == 4.*,
+    bytestring     == 0.10.4.*,
     containers     >= 0.5 && < 0.6,
-    dlist          == 0.7.*,
     mtl            >= 2.1 && < 2.2,
     process        >= 1.1,
+    temporary      == 1.2.0.*,
     uniplate       == 1.6.*
 
   ghc-options:

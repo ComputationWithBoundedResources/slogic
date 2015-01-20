@@ -28,7 +28,7 @@ import           SLogic.Result
 
 
 -- | Generic solver type.
-type Solver prob = prob -> IO (Result (M.Map String Value))
+type Solver prob = prob -> IO (Result (M.Map Var Value))
 
 -- | Generic decoder type.
 type Decoder res = Reader (M.Map Var Value) res

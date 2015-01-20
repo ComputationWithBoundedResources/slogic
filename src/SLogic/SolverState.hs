@@ -96,13 +96,13 @@ nvarM' = nvar `liftM` fresh
 
 sivarM' = do
   n <- fresh
-  let v = IVar n tInt
+  let v = ivar n
   assert $ v .>= neg one .&&  v .=< one
   return v
 
 snvarM' = do
   l <- fresh
-  let v = IVar l tNat
+  let v = nvar l
   assert $ v .=< one
   return v
 
