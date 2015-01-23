@@ -4,6 +4,7 @@ module SLogic.Decode where
 
 import qualified Data.Traversable as F
 import           Control.Monad
+import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 
 
@@ -28,4 +29,9 @@ instance Decode m a b => Decode m (Maybe a) (Maybe b) where
 
 instance (Ord i, Decode m c a) => Decode m (M.Map i c) (M.Map i a) where
   decode m = F.sequence $ M.map decode m
+
+instance (Ord i, Decode m c Bool) => Decode m (M.Map i c) (S.Set i) where
+  decode m = do
+    m1 <- F.sequence $ M.map decode m
+    return $ M.keysSet $ M.filter id m1
 

@@ -240,28 +240,28 @@ notFound v = "SmtLib.Smt.Int.decode.asks: variable " ++ v ++" not found."
 notLiteral :: String
 notLiteral = "SmtLib.Smt.Int.decode: not a literal."
 
-instance Decode (Reader (M.Map Var Value)) IExpr (Maybe Value) where
+instance Decode Environment IExpr (Maybe Value) where
   decode c = case c of
     IVal i   -> return (Just (IntVal i))
     IVar v _ -> get v
     _        -> return (Just Other)
     where get v = asks $ \m -> M.lookup v  m
 
-instance Decode (Reader (M.Map Var Value)) IExpr (Maybe Int) where
+instance Decode Environment IExpr (Maybe Int) where
   decode c = case c of
     IVal i   -> return (Just i)
     IVar v _ -> get v
     _        -> error notLiteral
     where get v = asks $ \m -> liftM fromValue (M.lookup v m)
 
-instance Decode (Reader (M.Map Var Value)) IExpr Value where
+instance Decode Environment IExpr Value where
   decode c = case c of
     IVal i   -> return (IntVal i)
     IVar v _ -> get v
     _        -> return Other
     where get v = asks $ \m -> error (notFound $ varStr v) `fromMaybe` M.lookup v  m
 
-instance Decode (Reader (M.Map Var Value)) IExpr Int where
+instance Decode Environment IExpr Int where
   decode c = case c of
     IVal i   -> return i
     IVar v _ -> get v

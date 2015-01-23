@@ -27,6 +27,9 @@ module SLogic.Logic.Core
   , eqM, neqM
   , bandM, borM, bigAndM, bigOrM
   , impliesM, iteM
+
+  -- * decoding environment
+  , Environment
   ) where
 
 
@@ -220,7 +223,10 @@ notFound v = "SmtLib.Logic.Core.decode.asks: variable " ++ v ++" not found."
 notLiteral :: String
 notLiteral = "SmtLib.Logic.Core.decode: not a literal."
 
-instance Decode (Reader (M.Map Var Value)) e Value => Decode (Reader (M.Map Var Value)) (Formula e) Value where
+-- | standard environment
+type Environment = Reader (M.Map Var Value)
+
+instance Decode Environment e Value => Decode (Reader (M.Map Var Value)) (Formula e) Value where
   decode c = case c of
     Atom a -> decode a
     BVal b -> return (BoolVal b)
@@ -228,7 +234,7 @@ instance Decode (Reader (M.Map Var Value)) e Value => Decode (Reader (M.Map Var 
     _      -> return Other
     where get v = asks $ \m -> Other `fromMaybe` M.lookup v  m
 
-instance Decode (Reader (M.Map Var Value)) (Formula e) Bool where
+instance Decode Environment (Formula e) Bool where
   decode c = case c of
     BVal b -> return b
     BVar v -> get v
