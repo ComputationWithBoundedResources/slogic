@@ -33,5 +33,12 @@ instance (Ord i, Decode m c a) => Decode m (M.Map i c) (M.Map i a) where
 instance (Ord i, Decode m c Bool) => Decode m (M.Map i c) (S.Set i) where
   decode m = do
     m1 <- F.sequence $ M.map decode m
-    return $ M.keysSet $ M.filter id m1
+    return . M.keysSet $ M.filter id m1
+
+data Property a i c = Property (a -> Bool) (M.Map i c)
+
+instance (Ord i, Decode m c a) => Decode m (Property a i c) (S.Set i) where
+  decode (Property k m) = do
+    m1 <- F.sequence $ M.map decode m
+    return . M.keysSet $ M.filter k m1
 

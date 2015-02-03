@@ -33,13 +33,14 @@ module SLogic.Logic.Core
   ) where
 
 
+import qualified Data.Foldable as F
 import qualified Data.ByteString.Char8 as BS
 import           Control.Monad
 import           Control.Monad.Reader
 import           Data.Generics.Uniplate.Direct
 import qualified Data.Map.Strict               as M
 import           Data.Maybe                    (fromMaybe)
-import qualified Data.Set                          as S
+import qualified Data.Set                      as S
 
 import           SLogic.Decode
 import           SLogic.Result
@@ -133,11 +134,13 @@ a `bor`  b = Or [a,b]
 --
 -- prop> bigAnd [] = top
 -- prop> bigOr []  = bot
-bigAnd, bigOr :: [Formula a] -> Formula a
-bigAnd [] = top
-bigAnd es = And es
-bigOr  [] = bot
-bigOr  es = Or es
+bigAnd, bigOr :: F.Foldable t => t (Formula a) -> Formula a
+bigAnd = bigAnd' . F.toList where
+  bigAnd' [] = top
+  bigAnd' es = And es
+bigOr  = bigOr' . F.toList where
+  bigOr' [] = top
+  bigOr' es = Or es
 
 -- | Boolean implication.
 implies :: Formula a -> Formula a -> Formula a
@@ -226,7 +229,7 @@ notLiteral = "SmtLib.Logic.Core.decode: not a literal."
 -- | standard environment
 type Environment = Reader (M.Map Var Value)
 
-instance Decode Environment e Value => Decode (Reader (M.Map Var Value)) (Formula e) Value where
+instance Decode Environment e Value => Decode Environment (Formula e) Value where
   decode c = case c of
     Atom a -> decode a
     BVal b -> return (BoolVal b)
@@ -240,4 +243,11 @@ instance Decode Environment (Formula e) Bool where
     BVar v -> get v
     _      -> error notLiteral
     where get v = asks $ \m -> maybe (error . notFound $ varStr v) fromValue (M.lookup v m)
+
+instance Decode Environment (Formula e) (Maybe Bool) where
+  decode c = case c of
+    BVal b -> return (Just b)
+    BVar v -> get v
+    _      -> error notLiteral
+    where get v = asks $ \m -> liftM fromValue (M.lookup v m)
 
