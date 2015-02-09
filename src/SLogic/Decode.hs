@@ -11,8 +11,8 @@ import qualified Data.Map.Strict as M
 class Monad m => Decode m c a where
   decode :: c -> m a
 
-instance Monad m => Decode m () () where
-  decode () = return ()
+instance Monad m => Decode m i i where
+  decode = return
 
 instance (Decode m c1 a1, Decode m c2 a2) => Decode m (c1,c2) (a1,a2) where
   decode (c1,c2) = do a1 <- decode c1; a2 <- decode c2; return (a1,a2)
