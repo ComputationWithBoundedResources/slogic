@@ -28,14 +28,14 @@ import           SLogic.Result
 
 
 -- | Generic solver type.
-type Solver prob = prob -> IO (Result (M.Map Var Value))
+type Solver m prob = prob -> m (Result (M.Map Var Value))
 
 -- | Generic decoder type.
 type Decoder res = Reader (M.Map Var Value) res
 
 
 -- | Generic solve function.
-solve :: Solver prob -> prob -> Decoder res -> IO (Result res)
+solve :: MonadIO m => Solver m prob -> prob -> Decoder res -> m (Result res)
 solve solver problem decoder = do
   result <- solver problem
   case result of
@@ -52,11 +52,11 @@ newtype SolverM st res = SolverM { runSolverM :: State st res }
   deriving (Functor, Applicative, Monad, MonadState st)
 
 -- | Solve function for 'SolverM'.
-solveM ::
-  Solver prob
+solveM :: MonadIO m => 
+  Solver m prob
   -> prob -- ^ initial state/problem.
   -> SolverM prob (Decoder res)
-  -> IO (Result res)
+  -> m (Result res)
 solveM solver initial build = do
   let (decoder, problem) = runState (runSolverM build) initial
   result <- solver problem

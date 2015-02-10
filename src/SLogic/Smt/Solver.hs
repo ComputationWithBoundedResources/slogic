@@ -2,7 +2,10 @@
 -- | This module provides 'Solver' implementations for SMT - Formula IFormula
 module SLogic.Smt.Solver
   (
-  minismt
+  SolverOptions (..)
+  , defaultOptions
+
+  , minismt
   , minismt'
 
   , yices
@@ -12,14 +15,16 @@ module SLogic.Smt.Solver
   , z3'
   ) where
 
-import System.IO.Temp (withSystemTempFile)
-import System.IO (hFlush, hClose)
-import Data.Monoid
+import qualified Control.Exception     as E
+import           Control.Monad.Trans   (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.List                    as L
-import qualified Data.Map.Strict              as M
-import qualified Data.Set                     as S
+import qualified Data.List             as L
+import qualified Data.Map.Strict       as M
+import           Data.Monoid
+import qualified Data.Set              as S
 import           System.Exit
+import           System.IO             (Handle, hClose, hFlush)
+import           System.IO.Temp        (openTempFile, withSystemTempFile)
 import           System.Process
 
 import           SLogic.Logic.Core
@@ -112,7 +117,7 @@ ppDeclareFun :: (Var, VType) -> DString
 ppDeclareFun (v,ty) = toDString "(declare-fun " . asDString v . toDString " () " . asDString ty . tRpa
 
 ppDeclareFuns :: [(Var, VType)] -> DString
-ppDeclareFuns [] = temp 
+ppDeclareFuns [] = temp
 ppDeclareFuns as = foldr k temp as
   where k a acc = acc . toDString "\n" . ppDeclareFun a
 
@@ -130,7 +135,59 @@ ppCheckSat = toDString "\n(check-sat)"
 ppGetValues :: [Var] -> DString
 ppGetValues [] = temp
 ppGetValues vs = toDString "\n(get-value " . ppParens (ppList asDString vs) . toDString ")"
-  
+
+
+--- * solver ---------------------------------------------------------------------------------------------------------
+
+-- MS: we use temporary files for the external solvers
+withFile :: Maybe FilePath -> Maybe FilePath -> (FilePath -> Handle -> IO a) -> IO a
+withFile (Just fb) (Just na) = E.bracket (openTempFile fb na) (hClose . snd) . uncurry
+withFile (Just fb) Nothing   = E.bracket (openTempFile fb "smt2") (hClose . snd) . uncurry
+withFile Nothing (Just na)   = withSystemTempFile na
+withFile _ _                 = withSystemTempFile "smt2"
+
+type Args = [String]
+type Cmd = String
+
+
+-- MS: readProcessWithExitCode does not kill the external process only sends a SIGTERM signal
+-- so the temporary file may be locked when sending threadKill in an async setting.
+-- | Solver options
+-- Temporary files are used for the external solvers. 'tmpFile' indicates a suffix of the temporary file. If 'tmpDir'
+-- is not set, an attempt to delete the temporary file is made. Note: This may file in an asynchrouns setting, due to
+-- the current process handling. If 'tmpDir' is set temporary files are stored in the 'tmpDir'.
+data SolverOptions = SolverOptions
+  { args    :: Args            -- ^ cmd specific arguments
+  , tmpDir  :: Maybe FilePath
+  , tmpFile :: Maybe FilePath }
+
+-- | Default options.
+defaultOptions :: Args -> SolverOptions
+defaultOptions as = SolverOptions { args = as, tmpDir = Nothing, tmpFile = Nothing }
+
+-- | Generic solver function
+gSolver :: MonadIO m =>
+  (SolverState (Formula IFormula) -> DString)
+  -> (String -> (Var, Value))
+  -> Cmd
+  -> SolverOptions
+  -> Solver m (SolverState (Formula IFormula))
+gSolver pp pl cmd opts st = do
+  let input = pp st BS.empty
+  liftIO $ withFile (tmpDir opts) (tmpFile opts) $ \file hfile -> do
+    BS.hPutStr hfile input
+    hFlush hfile
+    hClose hfile
+    (code , stdout, stderr) <- readProcessWithExitCode cmd (args opts ++ [file]) ""
+    return $ case code of
+      ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
+      ExitSuccess   -> case lines stdout of
+        ["sat"]                   -> Sat M.empty
+        "sat"     : x@('(':_): xs -> Sat . M.fromList $ map pl (x:xs)
+        "sat"     : _ : xs        -> Sat . M.fromList $ map pl xs
+        "unsat"   : _             -> Unsat
+        "unknown" : _             -> Unknown
+        _                         -> Error stdout
 
 
 -- MS:
@@ -141,46 +198,31 @@ ppGetValues vs = toDString "\n(get-value " . ppParens (ppList asDString vs) . to
 -- * since minismt 0.6; the second line displays the time
 --
 -- TODO: insert version check
-
-
 ppMinismt :: SolverState (Formula IFormula) -> DString
-ppMinismt st = 
+ppMinismt st =
   ppSetLogic (format st)
   . ppDeclareFuns allvars
   . ppAsserts (ppExpr' True ppIFormula) (asserts st)
   . ppCheckSat
   where allvars = S.toList $ foldl (\s -> S.union s . vars) S.empty (asserts st)
 
+plMinismt :: String -> (Var, Value)
+plMinismt line = (strVar var, read (tail val)::Value)
+  where (var,val) = break (== '=') $ filter (/=' ') line
+
 -- | Default minismt solver.
-minismt :: Solver (SolverState (Formula IFormula))
-minismt = minismt' ["-m","-v2"]
+minismt :: MonadIO m => Solver m (SolverState (Formula IFormula))
+minismt = minismt' (defaultOptions ["-m","-v2"])
 
--- | Minismt solver. Constructs the problem from 'SolverState'.
-minismt' :: [String] -> Solver (SolverState (Formula IFormula))
-minismt' args st = do
-  let input = ppMinismt st BS.empty
-  withSystemTempFile "smt2x" $ \file hfile -> do
-    BS.hPutStr hfile input
-    hFlush hfile
-    hClose hfile
-    (code , stdout, stderr) <- readProcessWithExitCode "minismt" (args ++ [file]) ""
-    return $ case code of
-      ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
-      ExitSuccess   -> case lines stdout of
-        "sat"   : _ : xs -> Sat . M.fromList $ map parse xs
-        "unsat" : _      -> Unsat
-        "unknown" : _    -> Unknown
-        _                -> Error stdout
-  where
-    parse line = (strVar var, read (tail val)::Value)
-      where (var,val) = break (== '=') $ filter (/=' ') line
-
+-- | minismt solver.
+minismt' ::  MonadIO m => SolverOptions -> Solver m (SolverState (Formula IFormula))
+minismt'= gSolver ppMinismt plMinismt "minismt"
 
 -- smt2lib Standard
 -- does not support Nat as available in Formula IFormula
 -- hence, we declare each Nat variable as Int and add an additional assertion
 ppSmt2 ::  SolverState (Formula IFormula) -> DString
-ppSmt2 st = 
+ppSmt2 st =
     ppSetLogic (format st)
     . ppDeclareFuns varsL
     . ppDeclareFuns natsL
@@ -196,35 +238,19 @@ ppSmt2 st =
       natsL = map (\(v,_) -> (v, BS.pack "Int")) $ S.toList natsS
       nat (v,ty) = IVar v ty .>= IVal 0
 
-smt2 :: String -> [String] -> Solver (SolverState (Formula IFormula))
-smt2 p args st = do
-  let input = ppSmt2 st BS.empty
-  withSystemTempFile "smt2x" $ \file hfile -> do
-    BS.hPutStr hfile input
-    hFlush hfile
-    hClose hfile
-    (code , stdout, stderr) <- readProcessWithExitCode p (args ++ [file]) ""
-    return $ case code of
-      ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
-      ExitSuccess   -> case lines stdout of
-        "sat"   : xs  -> Sat . M.fromList $ map parse xs
-        "unsat" : _   -> Unsat
-        "unknown" : _ -> Unknown
-        _             -> Error stdout
-    where
-      parse line = (strVar var, read (tail val)::Value)
-        where (var,val) = break (== ' ') . filter (`L.notElem` "()") $ dropWhile (==' ') line
+plSmt2 :: String -> (Var, Value)
+plSmt2 line = (strVar var, read (tail val)::Value)
+  where (var,val) = break (== ' ') . filter (`L.notElem` "()") $ dropWhile (==' ') line
 
+yices :: MonadIO m => Solver m (SolverState (Formula IFormula))
+yices = yices' (defaultOptions [])
 
-yices :: Solver (SolverState (Formula IFormula))
-yices = yices' []
+yices' :: MonadIO m => SolverOptions -> Solver m (SolverState (Formula IFormula))
+yices' = gSolver ppSmt2 plSmt2 "yices-smt2"
 
-yices' :: [String] -> Solver (SolverState (Formula IFormula))
-yices' = smt2 "yices-smt2"
+z3 :: MonadIO m => Solver m (SolverState (Formula IFormula))
+z3 = z3' (defaultOptions ["-smt2", "-in"])
 
-z3 :: Solver (SolverState (Formula IFormula))
-z3 = z3' ["-smt2","-in"]
-
-z3' :: [String] -> Solver (SolverState (Formula IFormula))
-z3' = smt2 "z3"
+z3' :: MonadIO m => SolverOptions -> Solver m (SolverState (Formula IFormula))
+z3' = gSolver ppSmt2 plSmt2 "z3"
 

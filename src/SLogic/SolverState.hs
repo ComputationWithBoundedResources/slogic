@@ -28,16 +28,16 @@ import SLogic.Solver
 
 
 -- | Specialised 'Solver' type.
-type SolverSt prob = Solver (SolverState prob)
+type SolverSt m prob = Solver m (SolverState prob)
 
 -- | Specialised 'SolverM' type.
 type SolverStM prob = SolverM (SolverState prob)
 
 -- | Like 'solveM', but 'initialState' already set.
-solveStM ::
-  SolverSt prob
+solveStM :: MonadIO m => 
+  SolverSt m prob
   -> SolverStM prob (Decoder res)
-  -> IO (Result res)
+  -> m (Result res)
 solveStM solver = solveM solver initialState
 
 -- | A solver state parametric in the problem.
