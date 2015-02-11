@@ -13,6 +13,10 @@ module SLogic.Smt.Solver
   , z3'
 
   -- * pretty printer and result parser for custom IO interaction
+  , SolverFormatter
+  , SolverParser
+  , Args
+  , Cmd
   , minismtFormatter
   , minismtParser
 

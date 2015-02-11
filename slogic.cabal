@@ -31,11 +31,11 @@ library
   build-depends:       
     ansi-wl-pprint >= 0.6 && < 0.7,
     base           == 4.*,
-    bytestring     == 0.10.4.*,
+    bytestring     == 0.10.*,
     containers     >= 0.5 && < 0.6,
     mtl            >= 2.1 && < 2.2,
-    process        >= 1.1,
-    temporary      == 1.2.0.*,
+    process        == 1.2.*,
+    temporary      == 1.2.*,
     uniplate       == 1.6.*
 
   ghc-options:
