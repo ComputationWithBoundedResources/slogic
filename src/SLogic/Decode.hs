@@ -2,43 +2,43 @@
 module SLogic.Decode where
 
 
-import qualified Data.Traversable as F
+import           Control.Applicative
 import           Control.Monad
-import qualified Data.Set as S
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Strict     as M
+import qualified Data.Set            as S
+import qualified Data.Traversable    as F
 
 
-class Monad m => Decode m c a where
+class (Applicative m, Monad m) => Decode m c a where
   decode :: c -> m a
 
-instance Monad m => Decode m i i where
+instance (Applicative m, Monad m) => Decode m i i where
   decode = return
 
 instance (Decode m c1 a1, Decode m c2 a2) => Decode m (c1,c2) (a1,a2) where
-  decode (c1,c2) = do a1 <- decode c1; a2 <- decode c2; return (a1,a2)
+  decode (c1,c2) = (,) <$> decode c1 <*> decode c2
 
 instance (Decode m c1 a1, Decode m c2 a2, Decode m c3 a3) => Decode m (c1,c2,c3) (a1,a2,a3) where
-  decode (c1,c2,c3) = do a1 <- decode c1; a2 <- decode c2; a3 <- decode c3; return (a1,a2,a3)
+  decode (c1,c2,c3) = (,,) <$> decode c1 <*> decode c2 <*> decode c3
+
+instance (Decode m c1 a1, Decode m c2 a2, Decode m c3 a3, Decode m c4 a4) => Decode m (c1,c2,c3,c4) (a1,a2,a3,a4) where
+  decode (c1,c2,c3,c4) = (,,,) <$> decode c1 <*> decode c2 <*> decode c3 <*> decode c4
 
 instance (Decode m c a) => Decode m [c] [a] where
   decode = mapM decode
 
 instance Decode m a b => Decode m (Maybe a) (Maybe b) where
-  decode (Just b) = liftM Just (decode b)
+  decode (Just b) = Just `liftM` decode b
   decode Nothing  = return Nothing
 
 instance (Ord i, Decode m c a) => Decode m (M.Map i c) (M.Map i a) where
-  decode m = F.sequence $ M.map decode m
+  decode = F.mapM decode
 
 instance (Ord i, Decode m c Bool) => Decode m (M.Map i c) (S.Set i) where
-  decode m = do
-    m1 <- F.sequence $ M.map decode m
-    return . M.keysSet $ M.filter id m1
+  decode m = (M.keysSet . M.filter id) `liftM` F.mapM decode m
 
 data Property a i c = Property (a -> Bool) (M.Map i c)
 
 instance (Ord i, Decode m c a) => Decode m (Property a i c) (S.Set i) where
-  decode (Property k m) = do
-    m1 <- F.sequence $ M.map decode m
-    return . M.keysSet $ M.filter k m1
+  decode (Property k m) = (M.keysSet . M.filter k) `liftM` F.mapM decode m
 

@@ -28,3 +28,15 @@ instance Functor Result where
   _ `fmap` Unknown   = Unknown
   _ `fmap` (Error s) = Error s
 
+maybeSat :: Result v -> Maybe v
+maybeSat (Sat v) = Just v
+maybeSat _       = Nothing
+
+isSat :: Result v -> Bool
+isSat (Sat _) = True
+isSat _       = False
+
+isUnsat :: Result v -> Bool
+isUnsat Unsat = True
+isUnsat _     = False
+
