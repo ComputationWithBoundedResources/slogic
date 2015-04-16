@@ -18,7 +18,7 @@ module SLogic.Logic.Core
   -- * operator interface
   , (.==),(./=)
   , (.&&), (.||)
-  , (.==>)
+  , (.==>), (.<=>)
 
   -- * monadic interface
   , bvarM
@@ -57,6 +57,10 @@ vtypeStr = BS.unpack
 strVar, strVType :: String -> Var
 strVar   = BS.pack
 strVType = BS.pack
+
+-- FIXME: we probably never use the modulo theory
+-- simplify type (see minismt?); the LP theory is not much can be done extra
+-- easier typing equality ite ...; also easie type names Formula IFomula IExpr ??.. ah
 
 -- | Defines sat formula modulo some theory and equality.
 data Formula a
@@ -165,6 +169,7 @@ infix 4 .==,./=
 infixr 3 .&&
 infixr 2 .||
 infixr 1 .==>
+infixr 1 .<=>
 
 -- | Infix versions of 'band' and 'bor'.
 (.&&), (.||) :: Formula a -> Formula a -> Formula a
@@ -174,6 +179,9 @@ a .|| b = a `bor` b
 -- | Infix version of 'implies'.
 (.==>) :: Formula a -> Formula a -> Formula a
 (.==>) = implies
+
+(.<=>) :: Formula a -> Formula a -> Formula a
+(.<=>) a b = implies a b `band` implies b a
 
 -- | Infix versions of equality and diseuqlity.
 (.==),(./=) :: (LEq e1 e) => e1 -> e1 -> Formula e

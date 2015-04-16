@@ -97,13 +97,13 @@ nvarM' = nvar `liftM` fresh
 sivarM' = do
   n <- fresh
   let v = ivar n
-  assert $ v .>= neg one .&&  v .=< one
+  assert $ v .== neg one .|| v .== zero .|| v .== one
   return v
 
 snvarM' = do
   l <- fresh
   let v = nvar l
-  assert $ v .=< one
+  assert $ v .== zero .|| v .== one
   return v
 
 ivarMO, nvarMO, sivarMO, snvarMO :: Ord a => a -> MemoSolverM a (SolverState (Formula IFormula)) IExpr
