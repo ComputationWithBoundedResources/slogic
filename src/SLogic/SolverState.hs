@@ -8,6 +8,7 @@ module SLogic.SolverState
   , initialState
   , setFormat
   , assert
+  , assertM
   , fresh
 
 
@@ -64,6 +65,10 @@ setFormat s = do
 assert :: e -> SolverStM e ()
 assert e = modify k
   where k st = st { asserts = e:asserts st }
+
+-- | Monadic version of 'assert'.
+assertM :: SolverStM e e -> SolverStM e ()
+assertM e = e >>= assert
 
 -- | Returns a fresh symbol @f:i@.
 fresh :: SolverStM e String

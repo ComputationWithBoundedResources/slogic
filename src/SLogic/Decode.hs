@@ -12,7 +12,7 @@ import qualified Data.Traversable    as F
 class (Applicative m, Monad m) => Decode m c a where
   decode :: c -> m a
 
-instance (Applicative m, Monad m) => Decode m i i where
+instance (Applicative m, Monad m) => Decode m () () where
   decode = return
 
 instance (Decode m c1 a1, Decode m c2 a2) => Decode m (c1,c2) (a1,a2) where

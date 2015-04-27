@@ -9,6 +9,7 @@ module SLogic.Solver
   -- * Monadic Solver
   , SolverM (..)
   , solveM
+  , runSolverM
 
   -- * Memoization
   , Memo (..)
@@ -48,8 +49,11 @@ solve solver problem decoder = do
 -- * monadic interface
 
 -- | Generic Solver (State) monad.
-newtype SolverM st res = SolverM { runSolverM :: State st res }
+newtype SolverM st res = SolverM (State st res)
   deriving (Functor, Applicative, Monad, MonadState st)
+
+runSolverM :: SolverM s a -> s -> (a, s)
+runSolverM (SolverM st) = runState st
 
 -- | Solve function for 'SolverM'.
 solveM :: MonadIO m => 
@@ -58,13 +62,8 @@ solveM :: MonadIO m =>
   -> SolverM prob (Decoder res)
   -> m (Result res)
 solveM solver initial build = do
-  let (decoder, problem) = runState (runSolverM build) initial
-  result <- solver problem
-  case result of
-    Sat valuation -> return . Sat $ runReader decoder valuation
-    Unsat         -> return Unsat
-    Unknown       -> return Unknown
-    (Error s)     -> return (Error s)
+  let (decoder, problem) = runSolverM build initial
+  solve solver problem decoder
 
 
 -- * memoization
