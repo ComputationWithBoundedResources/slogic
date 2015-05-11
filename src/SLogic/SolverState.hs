@@ -97,7 +97,11 @@ bvarM' = bvar `liftM` fresh
 ivarM', nvarM', sivarM', snvarM' :: SolverStM (Formula IFormula) IExpr
 ivarM' = ivar `liftM` fresh
 
-nvarM' = nvar `liftM` fresh
+nvarM' = do
+  n <- fresh
+  let v = nvar n
+  assert $ nvar .>= zero
+  return v
 
 sivarM' = do
   n <- fresh
