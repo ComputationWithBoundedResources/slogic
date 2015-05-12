@@ -100,7 +100,7 @@ ivarM' = ivar `liftM` fresh
 nvarM' = do
   n <- fresh
   let v = nvar n
-  assert $ nvar .>= zero
+  assert $ v .>= zero
   return v
 
 sivarM' = do
