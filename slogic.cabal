@@ -33,7 +33,7 @@ library
     base           == 4.*,
     bytestring     == 0.10.*,
     containers     >= 0.5 && < 0.6,
-    mtl            >= 2.1 && < 2.2,
+    mtl            >= 2.1 && < 2.3,
     process        == 1.2.*,
     temporary      == 1.2.*,
     uniplate       == 1.6.*
