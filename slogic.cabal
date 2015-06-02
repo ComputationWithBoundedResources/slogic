@@ -1,16 +1,16 @@
 name:          slogic
 version:       0.0
 stability:     experimental
-author:        Michael Schaper <michael.schaper@uibk.ac.at>
+author:        Georg Moser, Michael Schaper
 maintainer:    Michael Schaper <michael.schaper@uibk.ac.at>
-license:       LGPL
-license-file:  COPYING.LESSER
-synopsis:      smt/lp interface
+license:       BSD3
+license-file:  LICENSE
+synopsis:      SMT-solver interface
 description:
-  a s(imple)logic library; provides interfaces for smt/lp solver
+  A s(imple)logic library that provides an interface to SMT-solvers supporting QF_NIA.
   
-cabal-version:       >=1.8
-build-type:          Simple
+cabal-version: >=1.8
+build-type:    Simple
 
 library
   exposed-modules:
