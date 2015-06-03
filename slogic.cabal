@@ -8,9 +8,12 @@ license-file:  LICENSE
 synopsis:      SMT-solver interface
 description:
   A s(imple)logic library that provides an interface to SMT-solvers supporting QF_NIA.
-  
 cabal-version: >=1.8
 build-type:    Simple
+
+source-repository head
+  type:     git
+  location: git://github.com/ComputationWithBoundedResources/slogic
 
 library
   exposed-modules:
