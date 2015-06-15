@@ -1,5 +1,11 @@
+{-# LANGUAGE DeriveFoldable    #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE DeriveTraversable #-}
 -- | This module provides the 'Result' type.
 module SLogic.Result where
+
+import Data.Foldable
+import Data.Traversable
 
 -- | Result Value.
 data Value
@@ -20,13 +26,7 @@ data Result v
   | Unsat
   | Unknown
   | Error String
-  deriving (Eq, Show)
-
-instance Functor Result where
-  f `fmap` Sat v     = Sat (f v)
-  _ `fmap` Unsat     = Unsat
-  _ `fmap` Unknown   = Unknown
-  _ `fmap` (Error s) = Error s
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 maybeSat :: Result v -> Maybe v
 maybeSat (Sat v) = Just v
