@@ -18,8 +18,9 @@ module SLogic.Smt.Solver
   , SolverParser
   , Args
   , Cmd
-  -- , -- minismtFormatter
-  -- , -- minismtParser
+
+  , minismtFormatter
+  , minismtParser
 
   , yicesFormatter
   , yicesParser

@@ -14,6 +14,8 @@ module SLogic.Smt.State
   , setLogic
   , assert
   , assertM
+
+  , Fresh (..)
   , fresh
 
   -- * bool & int functions
@@ -105,7 +107,7 @@ fresh = do
 -- * convenience functions
 
 -- | Returns a 'fresh' Boolean variable.
-bvarM' :: Fresh v => SmtSolverSt (Formula v) (Formula v)
+bvarM' :: Fresh v => SmtSolverSt v (Formula v)
 bvarM' = bvar `liftM` fresh
 
 {-bvarMO:: Ord a => a -> MemoSolverM a (Formula e) (Formula e)-}
