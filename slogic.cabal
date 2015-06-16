@@ -17,17 +17,14 @@ source-repository head
 
 library
   exposed-modules:
-    SLogic.Decode
-    SLogic.Result
-    SLogic.Logic
-    SLogic.Logic.Core 
-    SLogic.Logic.Int 
+    SLogic.Data.Decode
+    SLogic.Data.Result
+    SLogic.Data.Solver
+    SLogic.Logic.Formula 
+    SLogic.Logic.IntFormula 
     SLogic.Smt
     SLogic.Smt.Solver
-    --SLogic.Lp
-    --SLogic.Lp.Solver
-    SLogic.SolverState
-    SLogic.Solver
+    SLogic.Smt.State
   hs-source-dirs:
     src
 
@@ -39,7 +36,6 @@ library
     mtl            >= 2.1 && < 2.3,
     process        == 1.2.*,
     temporary      == 1.2.*,
-    uniplate       == 1.6.*
 
   ghc-options:
     -j -Wall -funbox-strict-fields -fno-warn-orphans -fno-spec-constr-count -rtsopts -with-rtsopts=-N

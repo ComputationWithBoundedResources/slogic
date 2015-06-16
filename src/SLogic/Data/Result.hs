@@ -1,8 +1,6 @@
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable #-}
 -- | This module provides the 'Result' type.
-module SLogic.Result where
+module SLogic.Data.Result where
 
 import Data.Foldable
 import Data.Traversable
@@ -16,9 +14,9 @@ data Value
 
 instance Read Value where
   readsPrec _ r = readsBool1 ++ readsBool2  ++ readsInt where
-    readsBool1 = [(BoolVal b, "") | (b,_)  <- reads r :: ([(Bool, String)])]
+    readsBool1 = [(BoolVal b, "")    | (b,_)  <- reads r :: ([(Bool, String)])]
     readsBool2 = [(BoolVal True, "") | ("true", _) <- lex r] ++ [(BoolVal False, "") | ("false", _) <- lex r]
-    readsInt   = [(IntVal i, "") | (i,_)  <- reads r :: ([(Int, String)])]
+    readsInt   = [(IntVal i, "")     | (i,_)  <- reads r :: ([(Int, String)])]
 
 -- | Result of the 'Solver'.
 data Result v

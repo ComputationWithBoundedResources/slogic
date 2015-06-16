@@ -1,11 +1,13 @@
 -- | This module provides the decoding mechanism.
-module SLogic.Decode where
+module SLogic.Data.Decode where
 
 
 import           Control.Applicative
 import           Control.Monad
 import qualified Data.Map.Strict     as M
+import qualified Data.IntMap.Strict  as IM
 import qualified Data.Set            as S
+import qualified Data.IntSet         as IS
 import qualified Data.Traversable    as F
 
 
@@ -34,8 +36,14 @@ instance Decode m a b => Decode m (Maybe a) (Maybe b) where
 instance (Ord i, Decode m c a) => Decode m (M.Map i c) (M.Map i a) where
   decode = F.mapM decode
 
+instance (Decode m c a) => Decode m (IM.IntMap c) (IM.IntMap a) where
+  decode = F.mapM decode
+
 instance (Ord i, Decode m c Bool) => Decode m (M.Map i c) (S.Set i) where
   decode m = (M.keysSet . M.filter id) `liftM` F.mapM decode m
+
+instance (Decode m c Bool) => Decode m (IM.IntMap c) IS.IntSet where
+  decode m = (IM.keysSet . IM.filter id) `liftM` F.mapM decode m
 
 data Property a i c = Property (a -> Bool) (M.Map i c)
 
