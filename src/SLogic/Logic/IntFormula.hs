@@ -62,9 +62,16 @@ num :: Int -> IExpr v
 num i = if i < 0 then neg (IVal (-i)) else IVal i
 
 mul, add, sub :: IExpr v -> IExpr v -> IExpr v
-mul a b = IMul [a,b]
-add a b = IAdd [a,b]
+mul a b = IMul (k a ++ k b)
+  where
+    k (IMul es) = es
+    k e        = [e]
+add a b = IAdd (k a ++ k b)
+  where
+    k (IAdd es) = es
+    k e        = [e]
 sub a b = ISub [a,b]
+
 
 neg :: IExpr v -> IExpr v
 neg e = ISub [e]

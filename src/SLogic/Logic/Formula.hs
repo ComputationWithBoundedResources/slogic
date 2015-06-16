@@ -20,6 +20,9 @@ import           SLogic.Data.Solver
 -- the easiest way is to extend Formula (like for IExpr) (maybe also Value) ond provide a suitably (safe) interface.
 -- This is a good compromise between a simple typing and s-expressions used by many other libraries.
 
+-- TODO MS: experiment with simple optimisations
+-- flattening IAdd/IMul helped suprisingly alot
+
 -- | Formula. SMT Core + Int.
 data Formula v
   = BVar v
@@ -115,7 +118,7 @@ bnot = Not
 -- | Boolean and; Boolean or.
 band, bor :: Formula v -> Formula v -> Formula v
 a `band` b = And [a,b]
-a `bor`  b = Or  [a,b]
+a `bor`  b = Or [a,b]
 
 -- | Boolean implication.
 implies :: Formula v -> Formula v -> Formula v
