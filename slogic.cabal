@@ -5,6 +5,7 @@ author:        Georg Moser, Michael Schaper
 maintainer:    Michael Schaper <michael.schaper@uibk.ac.at>
 license:       BSD3
 license-file:  LICENSE
+category:      Logic
 synopsis:      SMT-solver interface
 description:
   A s(imple)logic library that provides an interface to SMT-solvers supporting QF_NIA.
@@ -38,7 +39,7 @@ library
     temporary      == 1.2.*
 
   ghc-options:
-    -j -Wall -funbox-strict-fields -fno-warn-orphans -fno-spec-constr-count -rtsopts -with-rtsopts=-N
+    -Wall -funbox-strict-fields -fno-warn-orphans -fno-spec-constr-count -rtsopts -with-rtsopts=-N
 
   extensions:
     FlexibleContexts,
