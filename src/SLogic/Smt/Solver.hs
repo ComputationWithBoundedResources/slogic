@@ -129,7 +129,7 @@ ppIExpr b e = case e of
   ISub es      -> pp tSub es
   IAdd es      -> pp tAdd es
   IMul es      -> pp tMul es
-  IIte f e1 e2 -> ppParens $ tite <> ppIntFormula b f <> ppIExpr b e1 <> ppIExpr b e2
+  IIte f e1 e2 -> ppParens $ tite <> tspc <> ppIntFormula b f <> tspc <> ppIExpr b e1 <> tspc <> ppIExpr b e2
   where pp t = ppSExpr t (ppIExpr b)
 
 
