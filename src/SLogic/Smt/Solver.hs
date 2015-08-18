@@ -239,6 +239,7 @@ minismtParser s = case lines s of
   "sat"     : _ : xs        -> Sat . fill $ map pl xs
   "unsat"   : _             -> Unsat
   "unknown" : _             -> Unknown
+  "unusual termination" : _ -> Unknown
   _                         -> Error s
   where
     pl line = (toVar var, read (tail val)::Value)
