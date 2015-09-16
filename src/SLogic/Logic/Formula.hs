@@ -3,6 +3,7 @@
 module SLogic.Logic.Formula where
 
 
+import Control.Applicative
 import           Control.Monad
 import           Control.Monad.Reader
 import qualified Data.Foldable        as F
@@ -193,6 +194,9 @@ impliesM = liftM2 implies
 notLiteral :: String
 notLiteral = "SLogic.Logic.Formula.decode: not a literal."
 
+wrongArgument :: String
+wrongArgument = "SLogic.Logic.Formula.decode: wrong argument number."
+
 -- | standard environment
 type Environment v = Reader (Store v)
 
@@ -233,9 +237,15 @@ instance Storing v => Decode (Environment v) (IExpr v) (Maybe Int) where
 -- | Defaults to @0@.
 instance Storing v => Decode (Environment v) (IExpr v) Int where
   decode c = case c of
-    IVal i -> return i
-    IVar v -> get v
-    _      -> error notLiteral
+    IVal i        -> return i
+    IVar v        -> get v
+    IMul es       -> F.foldl' (*) 1 <$> T.traverse decode es
+    IAdd es       -> sum <$> T.traverse decode es
+    ISub []       -> error wrongArgument
+    ISub (e:es)   -> (-) <$> decode e <*> (sum <$> T.traverse decode es)
+    IIte eb e1 e2 -> do
+      b <- decode eb
+      if b then decode e1 else decode e2
     where
       get v = asks $ \m -> case find v m of
         Just (IntVal i) -> i
