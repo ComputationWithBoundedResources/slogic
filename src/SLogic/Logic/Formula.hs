@@ -3,7 +3,6 @@
 module SLogic.Logic.Formula where
 
 
-import Control.Applicative
 import           Control.Monad
 import           Control.Monad.Reader
 import qualified Data.Foldable        as F

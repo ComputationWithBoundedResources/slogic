@@ -2,8 +2,6 @@
 -- | This module provides the 'Result' type.
 module SLogic.Data.Result where
 
-import Data.Foldable
-import Data.Traversable
 
 -- | Result Value.
 data Value

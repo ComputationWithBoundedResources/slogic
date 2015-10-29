@@ -2,7 +2,6 @@
 module SLogic.Data.Decode where
 
 
-import           Control.Applicative
 import           Control.Monad
 import qualified Data.Map.Strict     as M
 import qualified Data.IntMap.Strict  as IM

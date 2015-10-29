@@ -25,7 +25,6 @@ module SLogic.Data.Solver
   ) where
 
 
-import           Control.Applicative        hiding (empty)
 import           Control.Arrow              (first)
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
