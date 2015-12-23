@@ -238,9 +238,10 @@ instance Storing v => Decode (Environment v) (IExpr v) Int where
   decode c = case c of
     IVal i        -> return i
     IVar v        -> get v
-    IMul es       -> F.foldl' (*) 1 <$> T.traverse decode es
+    IMul es       -> product <$> T.traverse decode es
     IAdd es       -> sum <$> T.traverse decode es
     ISub []       -> error wrongArgument
+    ISub [e]      -> negate <$> decode e
     ISub (e:es)   -> (-) <$> decode e <*> (sum <$> T.traverse decode es)
     IIte eb e1 e2 -> do
       b <- decode eb
