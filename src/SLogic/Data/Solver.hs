@@ -31,6 +31,8 @@ import           Control.Monad.State.Strict
 import qualified Data.Foldable              as F
 import qualified Data.IntMap.Strict         as IM
 import qualified Data.Map.Strict            as M
+import Data.Word
+import qualified Data.HashMap.Strict as HM
 
 import           SLogic.Data.Result
 
@@ -43,9 +45,19 @@ class Ord v => Var v where
   fromVar :: v -> String
 
 instance Var Int where
-  toVar ('f':'F':i) = read i :: Int
-  toVar _           = error "SLogic.Smt.State.fromVar.Int: not an Int"
-  fromVar i         = "fF" ++ show i
+  toVar ('f':i) = read i :: Int
+  toVar _       = error "SLogic.Smt.State.fromVar.Int: not an Int"
+  fromVar i     = "f" ++ show i
+
+instance Var Word8 where
+  toVar ('f':i) = read i :: Word8
+  toVar _       = error "SLogic.Smt.State.fromVar.Word8: not an Word16"
+  fromVar i     = "f" ++ show i
+
+instance Var Word16 where
+  toVar ('f':i) = read i :: Word16
+  toVar _       = error "SLogic.Smt.State.fromVar.Word8: not an Word16"
+  fromVar i     = "f" ++ show i
 
 instance Var String where
   toVar s   = s
@@ -74,6 +86,20 @@ instance Storing Int where
   insert var val (IntStore im) = IntStore $ IM.insert var val im
   find var (IntStore im)       = IM.lookup var im
   fill                         = IntStore . IM.fromList . F.toList
+
+instance Storing Word8 where
+  newtype Store Word8            = Word8Store (HM.HashMap Word8 Value)
+  empty                          = Word8Store HM.empty
+  insert var val (Word8Store im) = Word8Store $ HM.insert var val im
+  find var (Word8Store im)       = HM.lookup var im
+  fill                           = Word8Store . HM.fromList . F.toList
+
+instance Storing Word16 where
+  newtype Store Word16            = Word16Store (HM.HashMap Word16 Value)
+  empty                          = Word16Store HM.empty
+  insert var val (Word16Store im) = Word16Store $ HM.insert var val im
+  find var (Word16Store im)       = HM.lookup var im
+  fill                           = Word16Store . HM.fromList . F.toList
 
 instance Storing String where
   newtype Store String           = StringStore (M.Map String Value)

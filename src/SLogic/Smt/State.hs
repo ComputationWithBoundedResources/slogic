@@ -26,6 +26,7 @@ module SLogic.Smt.State
 
 
 import Control.Monad.State.Strict
+import Data.Word
 
 import SLogic.Data.Result
 import SLogic.Data.Solver
@@ -88,6 +89,12 @@ class Fresh v where
 
 instance Fresh Int where
   freshVar = id
+
+instance Fresh Word8 where
+  freshVar = fromIntegral
+
+instance Fresh Word16 where
+  freshVar = fromIntegral
 
 instance Fresh String where
   freshVar = fromVar

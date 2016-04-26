@@ -19,6 +19,11 @@ import           SLogic.Data.Solver
 -- only support constraints for integer arithmetic anyway. So we fix the type. If one wants to support another theory,
 -- the easiest way is to extend Formula (like for IExpr) (maybe also Value) ond provide a suitably (safe) interface.
 -- This is a good compromise between a simple typing and s-expressions used by many other libraries.
+--
+-- Alternatively follow the TTT2 approach. Provide constraints/operations over a generic NumVar / NumVal type. This
+-- makes the interface easy but probably unsafe as casts are needed 
+-- eg NumVar { type:Int } .+ NumVal {type:Rat{a:Int,b:Int}} - what happens here in encoding/smt/decoding
+--
 
 -- TODO MS: experiment with simple optimisations
 -- flattening IAdd/IMul helped suprisingly alot
@@ -169,7 +174,7 @@ topM = return top
 botM = return bot
 
 bnotM :: Monad m => m (Formula v) -> m (Formula v)
-bnotM = liftM bnot
+bnotM = fmap bnot
 
 bandM, borM :: Monad m => m (Formula v) -> m (Formula v) -> m (Formula v)
 bandM = liftM2 band
