@@ -1,4 +1,8 @@
-{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable, StandaloneDeriving #-}
+{-# LANGUAGE ConstraintKinds    #-}
+{-# LANGUAGE DeriveFoldable     #-}
+{-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE DeriveTraversable  #-}
+{-# LANGUAGE TypeFamilies       #-}
 -- | This module provides the the type for (SMT)-Formula.
 module SLogic.Logic.Formula where
 
@@ -12,21 +16,18 @@ import qualified Data.Traversable     as T
 import           SLogic.Data.Decode
 import           SLogic.Data.Result
 import           SLogic.Data.Solver
+import           SLogic.Logic.Logic
 
+-- MS: Optimisations?
+-- * make flat formulas
+--   * capture some simple cases (nested add).., or
+--   * rewrite/simplify formula
+-- * or is it actually better to have Add a b ? and provide a context in SMT.solver to obtain a flat structure?
+-- *
+-- * provide fresh counter vor bool and int; so we do not have to compute variables; then the problem may has unused
+-- variables 
+-- * specialise and pack fresh counter; for the beginning provide BUVar v; BFVar Int;
 
--- NOTE: MS:
--- When paramaterising the Formula type over some theory one has to lift atomic constraints, equality... Probably we
--- only support constraints for integer arithmetic anyway. So we fix the type. If one wants to support another theory,
--- the easiest way is to extend Formula (like for IExpr) (maybe also Value) ond provide a suitably (safe) interface.
--- This is a good compromise between a simple typing and s-expressions used by many other libraries.
---
--- Alternatively follow the TTT2 approach. Provide constraints/operations over a generic NumVar / NumVal type. This
--- makes the interface easy but probably unsafe as casts are needed 
--- eg NumVar { type:Int } .+ NumVal {type:Rat{a:Int,b:Int}} - what happens here in encoding/smt/decoding
---
-
--- TODO MS: experiment with simple optimisations
--- flattening IAdd/IMul helped suprisingly alot
 
 -- | Formula. SMT Core + Int.
 data Formula v
@@ -45,10 +46,7 @@ data Formula v
   | IGt  (IExpr v) (IExpr v)
   | IGte (IExpr v) (IExpr v)
 
-  deriving (Eq, Ord, Show, Functor)
-
-deriving instance F.Foldable Formula
-deriving instance T.Traversable Formula
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 -- | Integer Expressions.
 data IExpr v
@@ -60,15 +58,16 @@ data IExpr v
   | IMul [IExpr v]
 
   | IIte (Formula v) (IExpr v) (IExpr v)
-  deriving (Eq, Ord, Show, Functor)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-deriving instance F.Foldable IExpr
-deriving instance T.Traversable IExpr
 
-infixr 3 .&&
-infixr 2 .||
-infixr 1 .=>
-infixr 1 .<=>
+-- instance Num (IExpr w) where
+--   fromInteger = IVal . fromIntegral
+--   a + b       = IAdd [a,b]
+--   a * b       = IMul [a,b]
+--   negate a    = ISub [a]
+--   abs a       = IIte (a `IGte` IVal 0) a (negate a)
+--   signum a    = IIte (a `IEq` IVal 0) (IVal 0) (IIte (a `IGt` IVal 0) (IVal 1) (negate $ IVal 1 ))
 
 
 type VarType = String
@@ -100,7 +99,21 @@ variables f = case f of
       IIte b e1 e2 -> variables b `S.union` variables' e1 `S.union` variables' e2
 
 
---- * core -----------------------------------------------------------------------------------------------------------
+
+--- * Boolean --------------------------------------------------------------------------------------------------------
+
+instance Boolean (Formula v) where
+  a .&& b    = And [a,b]
+  a .|| b    = Or  [a,b]
+  bnot       = Not
+  top        = BVal True
+  bot        = BVal False
+  (.=>)      = Implies
+  bigAnd fs  = case F.toList fs of { [] -> BVal True;  xs -> And xs }
+  -- MS: bigOr == foldr (.||) bot; should the empty case really return False
+  bigOr fs   = case F.toList fs of { [] -> BVal False; xs -> Or  xs }
+  ball f     = bigAnd . fmap f . F.toList
+  bany f     = bigOr  . fmap f . F.toList
 
 -- | Returns a Boolean variable with the given id.
 bvar :: v -> Formula v
@@ -111,54 +124,41 @@ bool :: Bool -> Formula v
 bool True = BVal True
 bool _    = BVal False
 
--- | Top and bottom symbol.
-top, bot :: Formula v
-top = bool True
-bot = bool False
 
--- | Boolean not.
-bnot :: Formula v -> Formula v
-bnot = Not
 
--- | Boolean and; Boolean or.
-band, bor :: Formula v -> Formula v -> Formula v
-a `band` b = And [a,b]
-a `bor`  b = Or [a,b]
+--- * Arithmetic -----------------------------------------------------------------------------------------------------
 
--- | Boolean implication.
-implies :: Formula v -> Formula v -> Formula v
-implies = Implies
 
--- | List versions of 'band' and 'bor'.
---
--- prop> bigAnd [] == top
--- prop> bigOr []  == bot
-bigAnd, bigOr :: F.Foldable t => t (Formula v) -> Formula v
-bigAnd = bigAnd' . F.toList where
-  bigAnd' [] = top
-  bigAnd' es = And es
-bigOr  = bigOr' . F.toList where
-  bigOr' [] = bot
-  bigOr' es = Or es
+ivar :: v -> IExpr v
+ivar = IVar
 
-ball, bany :: (Functor f, F.Foldable f) => (a -> Formula v) -> f a -> Formula v
-ball f = bigAnd . fmap f
-bany f = bigOr  . fmap f
+num :: Int -> IExpr v
+num = IVal
 
---- * infix operators ------------------------------------------------------------------------------------------------
+instance AAdditive (IExpr v) where
+  a .+ b = IAdd [a,b]
+  zero   = IVal 0
+  bigAdd = IAdd . F.toList
 
--- | Infix versions of 'band' and 'bor'.
-(.&&), (.||) :: Formula v -> Formula v -> Formula v
-a .&& b = a `band` b
-a .|| b = a `bor` b
+instance AAdditiveGroup (IExpr v) where
+  neg a  = ISub [a]
+  a .- b = ISub [a,b]
 
--- | Infix version of 'implies'.
-(.=>) :: Formula v -> Formula v -> Formula v
-(.=>) = implies
+instance MMultiplicative (IExpr v) where
+  a .* b = IMul [a,b]
+  one    = IVal 1
+  bigMul = IMul . F.toList
 
--- | a .<=> b == a .=> b .&& b .=> a
-(.<=>) :: Formula v -> Formula v -> Formula v
-(.<=>) a b = implies a b `band` implies b a
+instance Equal (IExpr v) where
+  type B (IExpr v) = Formula v
+  (.==) = IEq
+
+instance Order (IExpr v) where
+  (.>)  = IGt
+  (.>=) = IGte
+
+instance Ite (IExpr v) where
+  ite = IIte
 
 
 --- * monadic interface ----------------------------------------------------------------------------------------------
@@ -177,15 +177,15 @@ bnotM :: Monad m => m (Formula v) -> m (Formula v)
 bnotM = fmap bnot
 
 bandM, borM :: Monad m => m (Formula v) -> m (Formula v) -> m (Formula v)
-bandM = liftM2 band
-borM  = liftM2 bor
+bandM = liftM2 (.&&)
+borM  = liftM2 (.||)
 
 bigAndM, bigOrM :: Monad m => [m (Formula v)] -> m (Formula v)
 bigAndM es = bigAnd `liftM` sequence es
 bigOrM  es = bigOr `liftM` sequence es
 
 impliesM :: Monad m => m (Formula v) -> m (Formula v) -> m (Formula v)
-impliesM = liftM2 implies
+impliesM = liftM2 (.=>)
 
 
 --- * decoding -------------------------------------------------------------------------------------------------------
@@ -203,6 +203,8 @@ wrongArgument = "SLogic.Logic.Formula.decode: wrong argument number."
 
 -- | standard environment
 type Environment v = Reader (Store v)
+
+-- TODO: MS: extend decode st. it decodes Formulas
 
 instance Storing v => Decode (Environment v) (Formula v) (Maybe Bool) where
   decode c = case c of

@@ -28,10 +28,10 @@ module SLogic.Smt.State
 import Control.Monad.State.Strict
 import Data.Word
 
+import SLogic.Logic.Logic
 import SLogic.Data.Result
 import SLogic.Data.Solver
 import SLogic.Logic.Formula
-import SLogic.Logic.IntFormula
 
 
 data Logic = QF_NIA | QF_LIA deriving (Eq, Ord, Show)

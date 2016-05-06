@@ -22,7 +22,8 @@ library
     SLogic.Data.Result
     SLogic.Data.Solver
     SLogic.Logic.Formula 
-    SLogic.Logic.IntFormula 
+    SLogic.Logic.Logic 
+    SLogic.Logic.Matrix
     SLogic.Smt
     SLogic.Smt.Solver
     SLogic.Smt.State
@@ -37,10 +38,11 @@ library
     unordered-containers     == 0.2.*,
     mtl            >= 2.1 && < 2.3,
     process        == 1.2.*,
-    temporary      == 1.2.*
+    temporary      == 1.2.*,
+    vector
 
   ghc-options:
-    -Wall -funbox-strict-fields -fno-warn-orphans -fno-spec-constr-count -rtsopts -with-rtsopts=-N
+    -Wall -funbox-strict-fields -threaded
 
   extensions:
     FlexibleContexts,
