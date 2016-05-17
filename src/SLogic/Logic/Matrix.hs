@@ -1,15 +1,13 @@
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable, TypeFamilies #-}
 -- | Simple and unsafe matrix module
---
---
+-- 
+-- a rip-off of the matrix package (https://hackage.haskell.org/package/matrix)
 module SLogic.Logic.Matrix
   where
 
 import           Control.Monad       (forM_)
 import qualified Data.List           as L (splitAt, transpose)
+import           Data.Monoid         ((<>))
 import qualified Data.Vector         as V
 import qualified Data.Vector.Mutable as MV
 import           SLogic.Logic.Logic
@@ -20,6 +18,13 @@ data Matrix k = M
   , ncols :: {-# UNPACK #-} !Int
   , mvect :: V.Vector k }
   deriving (Show, Eq, Functor, Foldable, Traversable)
+
+prettyMatrix :: Show a => Matrix a -> String
+prettyMatrix mx@M{ncols=m,nrows=n,mvect=v} = unlines
+ [ "[ " <> unwords ((\j -> fill len $ show $ mx !. (i,j)) `fmap` [1..n]) <> " ]" | i <- [1..m] ]
+ where
+    len        = V.maximum $ fmap (length . show) v
+    fill k str = replicate (k - length str) ' ' ++ str
 
 encode :: Int -> (Int,Int) -> Int
 encode m (i,j) = (i-1)*m + j - 1
