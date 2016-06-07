@@ -1,5 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE ScopedTypeVariables, TypeFamilies #-}
 -- | This module provides 'Solver' implementations for SMT - Formula IFormula
 module SLogic.Smt.Solver
   (
@@ -93,6 +92,15 @@ ppList _ []     = temp
 ppList f [a]    = f a
 ppList f (a:as) = f a <> tspc <> ppList f as
 
+ppBin :: (a -> DiffFormat) -> a -> a -> DiffFormat
+ppBin f a b = f a <> tspc <> f b
+
+ppSOne :: DiffFormat -> (t -> DiffFormat) -> t -> DiffFormat
+ppSOne s f a   = ppParens $ s <> tspc <> f a
+
+ppSBin :: DiffFormat -> (t -> DiffFormat) -> t -> t -> DiffFormat
+ppSBin s f a b = ppParens $ s <> tspc <> f a <> tspc <> f b
+
 ppSExpr :: DiffFormat -> (a -> DiffFormat) -> [a]-> DiffFormat
 ppSExpr s f as = ppParens $ s <> tspc <> ppList f as
 
@@ -122,32 +130,33 @@ tip1 = string "implies"
 tip2 = string "=>"
 
 
-ppIExpr :: Var v => Bool -> IExpr v -> DiffFormat
-ppIExpr b e = case e of
-  IVar v       -> ppVar v
-  IVal i       -> int i
-  ISub es      -> pp tSub es
-  IAdd es      -> pp tAdd es
-  IMul es      -> pp tMul es
-  IIte f e1 e2 -> ppParens $ tite <> tspc <> ppIntFormula b f <> tspc <> ppIExpr b e1 <> tspc <> ppIExpr b e2
-  where pp t = ppSExpr t (ppIExpr b)
+data CtxIExpr = CIExpr | CAdd | CMul
+data CtxIFormula = CIFormula | CAnd | COr
+
+ppIExpr :: Var v => Bool -> CtxIExpr -> IExpr v -> DiffFormat
+ppIExpr _ _ (IVar v)          = ppVar v
+ppIExpr _ _ (IVal i)          = int i
+ppIExpr b CAdd (IAdd e1 e2)   = ppBin       (ppIExpr b CAdd) e1 e2
+ppIExpr b _    (IAdd e1 e2)   = ppSBin tAdd (ppIExpr b CAdd) e1 e2
+ppIExpr b CMul (IMul e1 e2)   = ppBin       (ppIExpr b CMul) e1 e2
+ppIExpr b _    (IMul e1 e2)   = ppSBin tMul (ppIExpr b CMul) e1 e2
+ppIExpr b _    (INeg e)       = ppSOne tSub (ppIExpr b CIExpr) e
+ppIExpr b _    (IIte f e1 e2) = ppParens $ tite <> tspc <> ppIntFormula b CIFormula f <> tspc <> ppIExpr b CIExpr e1 <> tspc <> ppIExpr b CIExpr e2
 
 
-ppIntFormula :: Var v => Bool -> Formula v -> DiffFormat
-ppIntFormula imp e = case e of
-  BVar v        -> ppVar v
-  BVal b        -> if b then tt else tf
-  Not e1        -> pps tnot [e1]
-  And es        -> pps tand es
-  Or es         -> pps tor es
-  Implies e1 e2 -> pps (if imp then tip1 else tip2) [e1,e2]
-
-  IEq e1 e2  -> pp2 tEq e1 e2
-  IGt e1 e2  -> pp2 tGt e1 e2
-  IGte e1 e2 -> pp2 tGte e1 e2
-  where
-    pps s = ppSExpr s (ppIntFormula imp)
-    pp2 s e1 e2 = ppSExpr s (ppIExpr imp) [e1,e2]
+ppIntFormula :: Var v => Bool -> CtxIFormula -> Formula v -> DiffFormat
+ppIntFormula _ _ (BVar v)           = ppVar v
+ppIntFormula _ _ Top                = tt
+ppIntFormula _ _ Bot                = tf
+ppIntFormula b _ (Not e)            = ppSOne tnot (ppIntFormula b CIFormula) e
+ppIntFormula b CAnd (And e1 e2)     = ppBin       (ppIntFormula b CAnd) e1 e2
+ppIntFormula b _    (And e1 e2)     = ppSBin tand (ppIntFormula b CAnd) e1 e2
+ppIntFormula b COr  (Or e1 e2)      = ppBin       (ppIntFormula b COr ) e1 e2
+ppIntFormula b _    (Or e1 e2)      = ppSBin tor  (ppIntFormula b COr ) e1 e2
+ppIntFormula b _    (Implies e1 e2) = ppSExpr (if b then tip1 else tip2) (ppIntFormula b CIFormula) [e1,e2]
+ppIntFormula b _    (IEq e1 e2)     = ppSBin tEq  (ppIExpr b CIExpr) e1 e2
+ppIntFormula b _    (IGt e1 e2)     = ppSBin tGt  (ppIExpr b CIExpr) e1 e2
+ppIntFormula b _    (IGte e1 e2)    = ppSBin tGte (ppIExpr b CIExpr) e1 e2
 
 
 -- pretty printing of smt commands
@@ -230,7 +239,7 @@ minismtFormatter :: Var v => SolverFormatter v
 minismtFormatter st =
   ppSetLogic (show $ logic st)
   <> ppDeclareFuns allvars
-  <> ppAsserts (ppIntFormula True) (asserts st)
+  <> ppAsserts (ppIntFormula True CIFormula) (asserts st)
   <> ppCheckSat
   where allvars = S.toList $ S.unions (variables `fmap` asserts st)
 
@@ -249,7 +258,7 @@ smt2Formatter :: Var v => SolverFormatter v
 smt2Formatter st =
   ppSetLogic (show $ logic st)
   <> ppDeclareFuns allvars
-  <> ppAsserts (ppIntFormula False) (asserts st)
+  <> ppAsserts (ppIntFormula False CIFormula) (asserts st)
   <> ppCheckSat
   <> ppGetValues (fst `fmap` allvars)
   where allvars = S.toList $ S.unions (variables `fmap` asserts st)

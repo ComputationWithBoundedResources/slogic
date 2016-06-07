@@ -1,43 +1,30 @@
-{-# LANGUAGE ConstraintKinds    #-}
-{-# LANGUAGE DeriveFoldable     #-}
-{-# LANGUAGE DeriveFunctor      #-}
-{-# LANGUAGE DeriveTraversable  #-}
-{-# LANGUAGE TypeFamilies       #-}
+{-# LANGUAGE ConstraintKinds, DeriveFoldable, DeriveFunctor, DeriveTraversable, TypeFamilies #-}
 -- | This module provides the the type for (SMT)-Formula.
 module SLogic.Logic.Formula where
 
 
 import           Control.Monad
 import           Control.Monad.Reader
-import qualified Data.Foldable        as F
 import qualified Data.Set             as S
-import qualified Data.Traversable     as T
 
 import           SLogic.Data.Decode
 import           SLogic.Data.Result
 import           SLogic.Data.Solver
 import           SLogic.Logic.Logic
 
--- MS: Optimisations?
--- * make flat formulas
---   * capture some simple cases (nested add).., or
---   * rewrite/simplify formula
--- * or is it actually better to have Add a b ? and provide a context in SMT.solver to obtain a flat structure?
--- *
--- * provide fresh counter vor bool and int; so we do not have to compute variables; then the problem may has unused
--- variables 
--- * specialise and pack fresh counter; for the beginning provide BUVar v; BFVar Int;
 
+-- TODO: MS: optimise; differentiate between user vars and generated vars or use just generated vars
 
 -- | Formula. SMT Core + Int.
 data Formula v
   = BVar v
-  | BVal Bool
+  | Top
+  | Bot
 
   | Not (Formula v)
 
-  | And [Formula v]
-  | Or  [Formula v]
+  | And (Formula v) (Formula v)
+  | Or  (Formula v) (Formula v)
 
   | Implies (Formula v) (Formula v)
 
@@ -51,23 +38,14 @@ data Formula v
 -- | Integer Expressions.
 data IExpr v
   = IVar v
-  | IVal Int
+  | IVal {-# UNPACK #-}!Int
 
-  | ISub [IExpr v]
-  | IAdd [IExpr v]
-  | IMul [IExpr v]
+  | INeg (IExpr v)
+  | IAdd (IExpr v) (IExpr v)
+  | IMul (IExpr v) (IExpr v)
 
   | IIte (Formula v) (IExpr v) (IExpr v)
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-
--- instance Num (IExpr w) where
---   fromInteger = IVal . fromIntegral
---   a + b       = IAdd [a,b]
---   a * b       = IMul [a,b]
---   negate a    = ISub [a]
---   abs a       = IIte (a `IGte` IVal 0) a (negate a)
---   signum a    = IIte (a `IEq` IVal 0) (IVal 0) (IIte (a `IGt` IVal 0) (IVal 1) (negate $ IVal 1 ))
 
 
 type VarType = String
@@ -77,12 +55,13 @@ boolType = "Bool"
 intType  = "Int"
 
 variables :: Ord v => Formula v -> S.Set (v, VarType)
-variables f = case f of
+variables f =  case f of
   BVar v        -> S.singleton (v, boolType)
-  BVal _        -> S.empty
+  Top           -> S.empty
+  Bot           -> S.empty
   Not f1        -> variables f1
-  And fs        -> S.unions (variables `fmap` fs)
-  Or fs         -> S.unions (variables `fmap` fs)
+  And f1 f2     -> variables f1 `S.union` variables f2
+  Or f1 f2      -> variables f1 `S.union` variables f2
   Implies f1 f2 -> variables f1 `S.union` variables f2
 
   IEq e1 e2     -> variables' e1 `S.union` variables' e2
@@ -93,27 +72,29 @@ variables f = case f of
     variables' e = case e of
       IVar v       -> S.singleton (v,intType)
       IVal _       -> S.empty
-      ISub es      -> S.unions (variables' `fmap` es)
-      IAdd es      -> S.unions (variables' `fmap` es)
-      IMul es      -> S.unions (variables' `fmap` es)
+      INeg e1      -> variables' e1
+      IAdd e1 e2   -> variables' e1 `S.union` variables' e2
+      IMul e1 e2   -> variables' e1 `S.union` variables' e2
       IIte b e1 e2 -> variables b `S.union` variables' e1 `S.union` variables' e2
 
 
 
 --- * Boolean --------------------------------------------------------------------------------------------------------
+-- MS: Optimisations can be important. For matrices we want `0 .* e = 0` and `e .* 0`. This significantly improves the
+-- generated formula (when identity/triangular matrices are used). But (`1 .+ a = a`) decreases the performance
+-- significantly. So optimisations should be done domain specific. Further when optimisations are used variables may
+-- vanish; this should be considered when decoding.
+--
+-- MS: Note that 'bigAnd [] = Top', and similar for other monoid instances. Whereas `(and )` is an invalid formula
+-- according to the SMTv2 standard.
 
 instance Boolean (Formula v) where
-  a .&& b    = And [a,b]
-  a .|| b    = Or  [a,b]
-  bnot       = Not
-  top        = BVal True
-  bot        = BVal False
-  (.=>)      = Implies
-  bigAnd fs  = case F.toList fs of { [] -> BVal True;  xs -> And xs }
-  -- MS: bigOr == foldr (.||) bot; should the empty case really return False
-  bigOr fs   = case F.toList fs of { [] -> BVal False; xs -> Or  xs }
-  ball f     = bigAnd . fmap f . F.toList
-  bany f     = bigOr  . fmap f . F.toList
+  top   = Top
+  bot   = Bot
+  bnot  = Not
+  (.&&) = And
+  (.||) = Or
+  (.=>) = Implies
 
 -- | Returns a Boolean variable with the given id.
 bvar :: v -> Formula v
@@ -121,9 +102,33 @@ bvar = BVar
 
 -- | Returns a Boolean value.
 bool :: Bool -> Formula v
-bool True = BVal True
-bool _    = BVal False
+bool True = Top
+bool _    = Bot
 
+
+-- annihilate :: Formula v -> Formula v
+-- annihilate = simplify f g where
+--   f f1 = f1
+--   g (IMul (IVal 0) _) = IVal 0
+--   g (IMul _ (IVal 0)) = IVal 0
+--   g e1                = e1
+
+-- simplify :: (Formula v -> Formula v) -> (IExpr v -> IExpr v) -> Formula v -> Formula v
+-- simplify f g (Not f1)        = f $! Not (simplify f g f1)
+-- simplify f g (And f1 f2)     = f $! And (simplify f g f1) (simplify f g f2)
+-- simplify f g (Or  f1 f2)     = f $! Or (simplify f g f1) (simplify f g f2)
+-- simplify f g (Implies f1 f2) = f $! Implies (simplify f g f1) (simplify f g f2)
+-- simplify f g (IEq e1 e2)     = f $! IEq  (simplify' f g e1) (simplify' f g e2)
+-- simplify f g (IGt e1 e2)     = f $! IGt  (simplify' f g e1) (simplify' f g e2)
+-- simplify f g (IGte e1 e2)    = f $! IGte (simplify' f g e1) (simplify' f g e2)
+-- simplify _ _ f1              = f1
+
+-- simplify' :: (Formula v -> Formula v) -> (IExpr v -> IExpr v) -> IExpr v -> IExpr v
+-- simplify' f g (INeg e1)       = g $! INeg (simplify' f g e1)
+-- simplify' f g (IAdd e1 e2)    = g $! IAdd (simplify' f g e1) (simplify' f g e2)
+-- simplify' f g (IMul e1 e2)    = g $! IMul (simplify' f g e1) (simplify' f g e2)
+-- simplify' f g (IIte f1 e1 e2) = g $! IIte (simplify f g f1) (simplify' f g e1) (simplify' f g e2)
+-- simplify' _ _ e1              = e1
 
 
 --- * Arithmetic -----------------------------------------------------------------------------------------------------
@@ -136,18 +141,15 @@ num :: Int -> IExpr v
 num = IVal
 
 instance AAdditive (IExpr v) where
-  a .+ b = IAdd [a,b]
-  zero   = IVal 0
-  bigAdd = IAdd . F.toList
+  (.+) = IAdd
+  zero = IVal 0
 
 instance AAdditiveGroup (IExpr v) where
-  neg a  = ISub [a]
-  a .- b = ISub [a,b]
+  neg = INeg
 
 instance MMultiplicative (IExpr v) where
-  a .* b = IMul [a,b]
-  one    = IVal 1
-  bigMul = IMul . F.toList
+  (.*) = IMul
+  one  = IVal 1
 
 instance Equal (IExpr v) where
   type B (IExpr v) = Formula v
@@ -208,7 +210,8 @@ type Environment v = Reader (Store v)
 
 instance Storing v => Decode (Environment v) (Formula v) (Maybe Bool) where
   decode c = case c of
-    BVal b -> return (Just b)
+    Top    -> return (Just True)
+    Bot    -> return (Just False)
     BVar v -> get v
     _      -> error notLiteral
     where
@@ -220,7 +223,8 @@ instance Storing v => Decode (Environment v) (Formula v) (Maybe Bool) where
 -- | Defaults to @False@.
 instance Storing v => Decode (Environment v) (Formula v) Bool where
   decode c = case c of
-    BVal b  -> return b
+    Top    -> return True
+    Bot    -> return False
     BVar v -> get v
     _      -> error notLiteral
     where
@@ -231,9 +235,9 @@ instance Storing v => Decode (Environment v) (Formula v) Bool where
 
 instance Storing v => Decode (Environment v) (IExpr v) (Maybe Int) where
   decode c = case c of
-    IVal i -> return (Just i)
-    IVar v -> get v
-    _      -> error notLiteral
+    IVal i     -> return (Just i)
+    IVar v     -> get v
+    _          -> error "not a literal"
     where
       get v = asks $ \m -> case find v m of
         Just (IntVal i) -> Just i
@@ -245,11 +249,9 @@ instance Storing v => Decode (Environment v) (IExpr v) Int where
   decode c = case c of
     IVal i        -> return i
     IVar v        -> get v
-    IMul es       -> product <$> T.traverse decode es
-    IAdd es       -> sum <$> T.traverse decode es
-    ISub []       -> error wrongArgument
-    ISub [e]      -> negate <$> decode e
-    ISub (e:es)   -> (-) <$> decode e <*> (sum <$> T.traverse decode es)
+    IMul e1 e2    -> (*) <$> decode e1 <*> decode e2
+    IAdd e1 e2    -> (+) <$> decode e1 <*> decode e2
+    INeg e        -> negate <$> decode e
     IIte eb e1 e2 -> do
       b <- decode eb
       if b then decode e1 else decode e2

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable, TypeFamilies #-}
+{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable, TypeFamilies, DataKinds, ScopedTypeVariables #-}
 -- | Simple and unsafe matrix module
 -- 
 -- a rip-off of the matrix package (https://hackage.haskell.org/package/matrix)
@@ -11,7 +11,40 @@ import           Data.Monoid         ((<>))
 import qualified Data.Vector         as V
 import qualified Data.Vector.Mutable as MV
 import           SLogic.Logic.Logic
+import SLogic.Logic.Formula
 
+-- import Data.Proxy
+-- import GHC.TypeLits
+
+-- data MMatrix (m :: Nat) (n :: Nat) k = MM (V.Vector k) deriving Show
+
+-- pplus :: MMatrix m n k -> MMatrix m n k -> MMatrix m n k
+-- pplus = undefined
+
+-- mmul :: MMatrix m n k -> MMatrix n o k -> MMatrix m o k
+-- mmul = undefined
+
+-- generate :: forall m n k. (KnownNat m, KnownNat n) => (Int -> k) -> MMatrix m n k
+-- generate f = MM (V.generate (m*n) f) where
+--     m = fromInteger (natVal (Proxy :: Proxy m))
+--     n = fromInteger (natVal (Proxy :: Proxy n))
+
+
+-- unit' :: forall m n a. (KnownNat m, KnownNat n, AAdditive a) => MMatrix m n a
+-- unit' = MM (V.generate n (const zero))
+--   where n = fromInteger (natVal (Proxy :: Proxy n))
+
+-- ab :: Integer -> String
+-- ab i = case someNatVal (fromInteger i) of
+--   Just (SomeNat p) -> show $ MM (V.generate (fromInteger $ natVal p) (const 0))
+
+-- abc :: Integer -> String
+-- abc i = case someNatVal (fromInteger i) of
+--   Just (SomeNat (_ :: Proxy n)) -> show (generate (const 0) :: MMatrix n n Int)
+
+-- instance (KnownNat m, KnownNat n, AAdditive a) => AAdditive (MMatrix m n a) where
+--   (.+) = pplus
+--   zero = unit'
 
 data Matrix k = M
   { nrows :: {-# UNPACK #-} !Int
@@ -103,6 +136,15 @@ elementwise f m1 m2 = m1{ mvect = V.zipWith f (mvect m1) (mvect m2) }
 add :: AAdditive a => Matrix a -> Matrix a -> Matrix a
 add = elementwise (.+)
 
+iemul :: Matrix (IExpr v) -> Matrix (IExpr v) -> Matrix (IExpr v)
+iemul mx1@M{nrows=n1,ncols=m1} mx2@M{ncols=m2} = matrix n1 m2 $ \(i,j) -> bigAdd [ (mx1 !. (i,k)) `mmul` (mx2 !. (k,j)) | k <- [1 .. m1] ] where
+  (IVal 0) `mmul` _        = IVal 0
+  _        `mmul` (IVal 0) = IVal 0
+  a        `mmul` b        = IMul a b
+
+-- MS: not that I know what I do
+{-# RULES "mul/(IExpr v)" mul = iemul #-}
+{-# NOINLINE [1] mul                  #-}
 mul :: SSemiRing a => Matrix a -> Matrix a -> Matrix a
 mul mx1@M{nrows=n1,ncols=m1} mx2@M{ncols=m2} = matrix n1 m2 $ \(i,j) -> bigAdd [ mx1 !. (i,k) .* mx2 !. (k,j) | k <- [1 .. m1] ]
 
