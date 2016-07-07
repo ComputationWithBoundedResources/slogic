@@ -5,6 +5,7 @@ module SLogic.Logic.Formula where
 
 import           Control.Monad
 import           Control.Monad.Reader
+import qualified Data.Foldable        as F (toList)
 import qualified Data.Set             as S
 
 import           SLogic.Data.Decode
@@ -38,7 +39,7 @@ data Formula v
 -- | Integer Expressions.
 data IExpr v
   = IVar v
-  | IVal {-# UNPACK #-}!Int
+  | IVal !Int
 
   | INeg (IExpr v)
   | IAdd (IExpr v) (IExpr v)
@@ -96,6 +97,13 @@ instance Boolean (Formula v) where
   (.||) = Or
   (.=>) = Implies
 
+  bigAnd fs
+    | null (F.toList fs) = Top
+    | otherwise          = foldr1 (.&&) fs
+  bigOr fs
+    | null (F.toList fs) = Bot
+    | otherwise          = foldr1 (.||) fs
+
 -- | Returns a Boolean variable with the given id.
 bvar :: v -> Formula v
 bvar = BVar
@@ -143,6 +151,9 @@ num = IVal
 instance AAdditive (IExpr v) where
   (.+) = IAdd
   zero = IVal 0
+  bigAdd es
+    | null (F.toList es) = zero
+    | otherwise          = foldr1 (.+) es
 
 instance AAdditiveGroup (IExpr v) where
   neg = INeg
@@ -150,6 +161,9 @@ instance AAdditiveGroup (IExpr v) where
 instance MMultiplicative (IExpr v) where
   (.*) = IMul
   one  = IVal 1
+  bigMul es
+    | null (F.toList es) = one
+    | otherwise          = foldr1 (.*) es
 
 instance Equal (IExpr v) where
   type B (IExpr v) = Formula v
