@@ -135,7 +135,7 @@ data CtxIFormula = CIFormula | CAnd | COr
 
 ppIExpr :: Var v => Bool -> CtxIExpr -> IExpr v -> DiffFormat
 ppIExpr _ _ (IVar v)          = ppVar v
-ppIExpr _ _ (IVal i)          = int i
+ppIExpr _ _ (IVal i)          = if i >= 0 then int i else ppSOne tSub int (negate i)
 ppIExpr b CAdd (IAdd e1 e2)   = ppBin       (ppIExpr b CAdd) e1 e2
 ppIExpr b _    (IAdd e1 e2)   = ppSBin tAdd (ppIExpr b CAdd) e1 e2
 ppIExpr b CMul (IMul e1 e2)   = ppBin       (ppIExpr b CMul) e1 e2
