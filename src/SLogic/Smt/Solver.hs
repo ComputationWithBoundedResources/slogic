@@ -12,6 +12,9 @@ module SLogic.Smt.Solver
   , z3
   , z3'
 
+  , optimathsat
+  , optimathsat'
+
   -- * pretty printer and result parser for custom IO interaction
   , SolverFormatter
   , SolverParser
@@ -53,6 +56,7 @@ import           SLogic.Data.Solver
 import           SLogic.Logic.Formula
 import           SLogic.Smt.State
 
+import Debug.Trace
 
 --- * pretty printer -------------------------------------------------------------------------------------------------
 
@@ -130,33 +134,43 @@ tip1 = string "implies"
 tip2 = string "=>"
 
 
+-- MiniSmt uses "implies" rather than "=>" for implication
+data Minismt = Minismt | NoMinismt deriving Eq
+-- Optimization statements are only considered when using 'Optimization' 
+data Optimization = Optimization | NoOptimization deriving Eq
+
 data CtxIExpr = CIExpr | CAdd | CMul
 data CtxIFormula = CIFormula | CAnd | COr
 
-ppIExpr :: Var v => Bool -> CtxIExpr -> IExpr v -> DiffFormat
-ppIExpr _ _ (IVar v)          = ppVar v
-ppIExpr _ _ (IVal i)          = if i >= 0 then int i else ppSOne tSub int (negate i)
-ppIExpr b CAdd (IAdd e1 e2)   = ppBin       (ppIExpr b CAdd) e1 e2
-ppIExpr b _    (IAdd e1 e2)   = ppSBin tAdd (ppIExpr b CAdd) e1 e2
-ppIExpr b CMul (IMul e1 e2)   = ppBin       (ppIExpr b CMul) e1 e2
-ppIExpr b _    (IMul e1 e2)   = ppSBin tMul (ppIExpr b CMul) e1 e2
-ppIExpr b _    (INeg e)       = ppSOne tSub (ppIExpr b CIExpr) e
-ppIExpr b _    (IIte f e1 e2) = ppParens $ tite <> tspc <> ppIntFormula b CIFormula f <> tspc <> ppIExpr b CIExpr e1 <> tspc <> ppIExpr b CIExpr e2
+ppIExpr :: Var v => Minismt -> CtxIExpr -> IExpr v -> DiffFormat
+ppIExpr m ctx e = ppIExpr' ctx e where
+  ppIExpr' _    (IVar v)       = ppVar v
+  ppIExpr' _    (IVal i)       = if i >= 0 then int i else ppSOne tSub int (negate i)
+  ppIExpr' CAdd (IAdd e1 e2)   = ppBin       (ppIExpr' CAdd) e1 e2
+  ppIExpr' _    (IAdd e1 e2)   = ppSBin tAdd (ppIExpr' CAdd) e1 e2
+  ppIExpr' CMul (IMul e1 e2)   = ppBin       (ppIExpr' CMul) e1 e2
+  ppIExpr' _    (IMul e1 e2)   = ppSBin tMul (ppIExpr' CMul) e1 e2
+  ppIExpr' _    (INeg e1)      = ppSOne tSub (ppIExpr' CIExpr) e1
+  ppIExpr' _    (IIte f e1 e2) = ppParens $ tite <> tspc <> ppIntFormula m CIFormula f <> tspc 
+                                                 <> ppIExpr' CIExpr e1 <> tspc <> ppIExpr' CIExpr e2
 
 
-ppIntFormula :: Var v => Bool -> CtxIFormula -> Formula v -> DiffFormat
-ppIntFormula _ _ (BVar v)           = ppVar v
-ppIntFormula _ _ Top                = tt
-ppIntFormula _ _ Bot                = tf
-ppIntFormula b _ (Not e)            = ppSOne tnot (ppIntFormula b CIFormula) e
-ppIntFormula b CAnd (And e1 e2)     = ppBin       (ppIntFormula b CAnd) e1 e2
-ppIntFormula b _    (And e1 e2)     = ppSBin tand (ppIntFormula b CAnd) e1 e2
-ppIntFormula b COr  (Or e1 e2)      = ppBin       (ppIntFormula b COr ) e1 e2
-ppIntFormula b _    (Or e1 e2)      = ppSBin tor  (ppIntFormula b COr ) e1 e2
-ppIntFormula b _    (Implies e1 e2) = ppSExpr (if b then tip1 else tip2) (ppIntFormula b CIFormula) [e1,e2]
-ppIntFormula b _    (IEq e1 e2)     = ppSBin tEq  (ppIExpr b CIExpr) e1 e2
-ppIntFormula b _    (IGt e1 e2)     = ppSBin tGt  (ppIExpr b CIExpr) e1 e2
-ppIntFormula b _    (IGte e1 e2)    = ppSBin tGte (ppIExpr b CIExpr) e1 e2
+ppIntFormula :: Var v => Minismt -> CtxIFormula -> Formula v -> DiffFormat
+ppIntFormula m ctx fm = ppIntFormula' ctx fm where
+  ppIntFormula' _    (BVar v)        = ppVar v
+  ppIntFormula' _     Top            = tt
+  ppIntFormula' _     Bot            = tf
+  ppIntFormula' _    (Not e)         = ppSOne tnot (ppIntFormula' CIFormula) e
+  ppIntFormula' CAnd (And e1 e2)     = ppBin       (ppIntFormula' CAnd) e1 e2
+  ppIntFormula' _    (And e1 e2)     = ppSBin tand (ppIntFormula' CAnd) e1 e2
+  ppIntFormula' COr  (Or e1 e2)      = ppBin       (ppIntFormula' COr ) e1 e2
+  ppIntFormula' _    (Or e1 e2)      = ppSBin tor  (ppIntFormula' COr ) e1 e2
+  ppIntFormula' _    (Implies e1 e2) = ppSExpr (if (m == Minismt) then tip1 else tip2) (ppIntFormula' CIFormula) [e1,e2]
+  ppIntFormula' _    (IEq e1 e2)     = ppSBin tEq  (ppIExpr m CIExpr) e1 e2
+  ppIntFormula' _    (IGt e1 e2)     = ppSBin tGt  (ppIExpr m CIExpr) e1 e2
+  ppIntFormula' _    (IGte e1 e2)    = ppSBin tGte (ppIExpr m CIExpr) e1 e2
+  ppIntFormula' _    (Max e)         = ppSOne (string "maximize") (ppIExpr m CIExpr) e
+  ppIntFormula' _    (Min e)         = ppSOne (string "minimize") (ppIExpr m CIExpr) e
 
 
 -- pretty printing of smt commands
@@ -178,6 +192,11 @@ ppAsserts :: (a -> DiffFormat) -> [a] -> DiffFormat
 ppAsserts _ [] = temp
 ppAsserts f as = foldr k temp as
   where k a acc = string "\n" <> ppAssert f a <> acc
+
+ppOptimizations :: Optimization ->  (a -> DiffFormat) -> [a] -> DiffFormat
+ppOptimizations Optimization f as@(_:_) = foldr (\a acc -> string "\n" <> f a <> acc) temp as
+ppOptimizations _ _ _                   = temp
+
 
 ppCheckSat :: DiffFormat
 ppCheckSat = string "\n(check-sat)"
@@ -212,11 +231,12 @@ gSolver formatter parser cmd args st = do
   liftIO . withSystemTempFile "smt2x" $ \file hfile -> do
     hSetBinaryMode hfile True
     -- hSetBuffering hfile BlockBuffering
+    -- putStrLn (format2String $ diffFormat2Format input)
     hPutDiffFormat hfile input
     hFlush hfile
     hClose hfile
     (code, stdout, stderr) <- readProcessWithExitCode cmd (args ++ [file]) ""
-    return $ case code of
+    return $ traceShow code $ case code of
       ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
       ExitSuccess   -> parser stdout
 
@@ -235,13 +255,16 @@ minismt = minismt' ["-m","-v2"]
 minismt' ::  (MonadIO m, Storing v, Var v) => Args -> SmtSolver m v
 minismt'= gSolver minismtFormatter minismtParser "minismt"
 
+-- For minismt a model is obtained using the "-m" flag
 minismtFormatter :: Var v => SolverFormatter v
 minismtFormatter st =
   ppSetLogic (show $ logic st)
   <> ppDeclareFuns allvars
-  <> ppAsserts (ppIntFormula True CIFormula) (asserts st)
+  <> ppAsserts (ppIntFormula Minismt CIFormula) fms 
   <> ppCheckSat
-  where allvars = S.toList $ S.unions (variables `fmap` asserts st)
+  where 
+    allvars = S.toList $ S.unions (variables `fmap` asserts st)
+    fms     = filter (\fm -> case fm of {Max{} -> True; Min{} -> False; _ -> True}) (asserts st)
 
 minismtParser :: (Var v, Storing v) => SolverParser v
 minismtParser s = case lines s of
@@ -254,14 +277,17 @@ minismtParser s = case lines s of
     pl line = (toVar var, read (tail val)::Value)
       where (var,val) = break (== '=') $ filter (/=' ') line
 
-smt2Formatter :: Var v => SolverFormatter v
-smt2Formatter st =
+smt2Formatter :: Var v => Optimization -> SolverFormatter v
+smt2Formatter opt st =
   ppSetLogic (show $ logic st)
   <> ppDeclareFuns allvars
-  <> ppAsserts (ppIntFormula False CIFormula) (asserts st)
+  <> ppAsserts (ppIntFormula NoMinismt CIFormula) fms
+  <> ppOptimizations opt (ppIntFormula NoMinismt CIFormula) opts
   <> ppCheckSat
   <> ppGetValues (fst `fmap` allvars)
-  where allvars = S.toList $ S.unions (variables `fmap` asserts st)
+  where 
+    allvars    = S.toList $ S.unions (variables `fmap` asserts st)
+    (opts,fms) = L.partition (\fm -> case fm of {Max{} -> True; Min{} -> True; _ -> False}) (asserts st)
 
 smt2Parser :: (Var v, Storing v) => SolverParser v
 smt2Parser s = case lines s of
@@ -271,20 +297,28 @@ smt2Parser s = case lines s of
   _              -> Error s
   where
     pl line = (toVar var, read (tail val)::Value)
-      where (var,val) = break (== ' ') . filter (`L.notElem` "()") $ dropWhile (==' ') line
+      where (var,val) = break (== ' ') . dropWhile (==' ') $ filter (`L.notElem` "()") line
 
 
 yicesFormatter :: Var v => SolverFormatter v
-yicesFormatter = smt2Formatter
+yicesFormatter = smt2Formatter NoOptimization
 
 yicesParser :: (Var v, Storing v) => SolverParser v
 yicesParser = smt2Parser
 
 z3Formatter :: Var v => SolverFormatter v
-z3Formatter = smt2Formatter
+z3Formatter = smt2Formatter NoOptimization
 
 z3Parser :: (Var v, Storing v) => SolverParser v
 z3Parser = smt2Parser
+
+optimathsatFormatter :: Var v => SolverFormatter v
+optimathsatFormatter = smt2Formatter Optimization
+
+optimathsatParser :: (Var v, Storing v) => SolverParser v
+optimathsatParser = smt2Parser . unlines . dropWhile isComment . lines where
+  isComment (a:_) = a == '#'
+  isComment _     = False
 
 yices :: (MonadIO m, Storing v, Var v) => SmtSolver m v
 yices = yices' []
@@ -297,4 +331,13 @@ z3 = z3' ["-smt2", "-in"]
 
 z3' :: (MonadIO m, Storing v, Var v) => Args -> SmtSolver m v
 z3' = gSolver z3Formatter z3Parser "z3"
+
+-- OptiMathSat (http://optimathsat.disi.unitn.it/index.html)
+-- SMT for linear arithmetic supporting optimisations, MaxSMT,...
+-- here we only use "maximize" and "minimize"
+optimathsat :: (MonadIO m, Storing v, Var v) => SmtSolver m v
+optimathsat = optimathsat' ["-model_generation=True"]
+
+optimathsat' :: (MonadIO m, Storing v, Var v) => Args -> SmtSolver m v
+optimathsat' = gSolver optimathsatFormatter optimathsatParser "optimathsat"
 
