@@ -56,7 +56,7 @@ import           SLogic.Data.Solver
 import           SLogic.Logic.Formula
 import           SLogic.Smt.State
 
-import Debug.Trace
+-- import Debug.Trace
 
 --- * pretty printer -------------------------------------------------------------------------------------------------
 
@@ -236,7 +236,7 @@ gSolver formatter parser cmd args st = do
     hFlush hfile
     hClose hfile
     (code, stdout, stderr) <- readProcessWithExitCode cmd (args ++ [file]) ""
-    return $ traceShow code $ case code of
+    return $ case code of
       ExitFailure i -> Error $ "Error(" ++ show i ++ "," ++ show stderr ++ ")"
       ExitSuccess   -> parser stdout
 
