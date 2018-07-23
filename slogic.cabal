@@ -21,8 +21,8 @@ library
     SLogic.Data.Decode
     SLogic.Data.Result
     SLogic.Data.Solver
-    SLogic.Logic.Formula 
-    SLogic.Logic.Logic 
+    SLogic.Logic.Formula
+    SLogic.Logic.Logic
     SLogic.Logic.Matrix
     SLogic.Smt
     SLogic.Smt.Solver
@@ -30,15 +30,15 @@ library
   hs-source-dirs:
     src
 
-  build-depends:       
+  build-depends:
     ansi-wl-pprint >= 0.6 && < 0.7,
-    base           == 4.8.*,
-    bytestring     == 0.10.*,
+    base           >= 4.8 && < 5 ,
+    bytestring     >= 0.10,
     containers     >= 0.5 && < 0.6,
     unordered-containers     == 0.2.*,
     mtl            >= 2.1 && < 2.3,
-    process        == 1.2.*,
-    temporary      == 1.2.*,
+    process        >= 1.2,
+    temporary      >= 1.2,
     vector
 
   ghc-options:
