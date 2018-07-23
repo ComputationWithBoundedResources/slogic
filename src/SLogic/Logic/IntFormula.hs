@@ -62,6 +62,12 @@ ite :: Formula v -> IExpr v -> IExpr v -> IExpr v
 ite = IIte
 
 
+maximize :: IExpr v -> Formula v
+maximize = Max
+
+minimize :: IExpr v -> Formula v
+minimize = Min
+
 --- * infix operator -------------------------------------------------------------------------------------------------
 
 

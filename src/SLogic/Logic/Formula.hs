@@ -34,6 +34,10 @@ data Formula v
   | IGt  (IExpr v) (IExpr v)
   | IGte (IExpr v) (IExpr v)
 
+  -- optimise
+  | Max (IExpr v)
+  | Min (IExpr v)
+
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 -- | Integer Expressions.
@@ -68,6 +72,9 @@ variables f =  case f of
   IEq e1 e2     -> variables' e1 `S.union` variables' e2
   IGt e1 e2     -> variables' e1 `S.union` variables' e2
   IGte e1 e2    -> variables' e1 `S.union` variables' e2
+
+  Max e -> variables' e
+  Min e -> variables' e
   where
     variables' :: Ord v => IExpr v -> S.Set (v, VarType)
     variables' e = case e of
@@ -175,6 +182,10 @@ instance Order (IExpr v) where
 
 instance Ite (IExpr v) where
   ite = IIte
+
+maximize, minimize :: IExpr v -> Formula v
+maximize = Max
+minimize = Min
 
 
 --- * monadic interface ----------------------------------------------------------------------------------------------

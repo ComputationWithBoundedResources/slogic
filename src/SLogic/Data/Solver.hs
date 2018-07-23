@@ -46,7 +46,7 @@ class Ord v => Var v where
 
 instance Var Int where
   toVar ('f':i) = read i :: Int
-  toVar _       = error "SLogic.Smt.State.fromVar.Int: not an Int"
+  toVar f       = error ("SLogic.Smt.State.fromVar.Int: not an Int:" ++ f)
   fromVar i     = "f" ++ show i
 
 instance Var Word8 where
