@@ -44,7 +44,6 @@ import           Control.Monad.Trans        (MonadIO, liftIO)
 import qualified Data.ByteString.Builder    as BS
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.List                  as L
-import           Data.Monoid
 import qualified Data.Set                   as S
 import           System.Exit
 import           System.IO                  (Handle, hClose, hFlush, hSetBinaryMode)
